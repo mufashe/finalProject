@@ -1,0 +1,39 @@
+{#<!DOCTYPE html>#}
+{#<html>#}
+{#<head>#}
+{#    <title>Batch Prediction Upload</title>#}
+{#</head>#}
+{#<body>#}
+{#<h2>Upload Excel for Batch Prediction</h2>#}
+{#<form method="post" enctype="multipart/form-data">#}
+{#    {% csrf_token %}#}
+{#    <input type="file" name="file" accept=".xlsx,.xls" required>#}
+{#    <button type="submit">Upload and Predict</button>#}
+{#</form>#}
+{#{% if error %}#}
+{#    <p style="color: red">{{ error }}</p>#}
+{#{% endif %}#}
+{#</body>#}
+{#</html>#}
+
+
+{% extends "eduforecast/base.html" %}
+{% block content %}
+    <div class="card shadow-sm">
+        <div class="card-header">Upload Dataset (Excel/CSV)</div>
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data" class="row g-3">
+                {% csrf_token %}
+                <div class="col-12">
+                    {{ form.original_file.label_tag }} {{ form.original_file }}
+                    {% if form.original_file.errors %}
+                        <div class="text-danger small">{{ form.original_file.errors }}</div>{% endif %}
+                </div>
+                <div class="col-12">
+                    <button class="btn btn-primary">Upload</button>
+                    <a class="btn btn-light" href="{% url 'uploader:list' %}">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}

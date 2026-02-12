@@ -1,0 +1,44 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload & Predict</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body class="container">
+<main>
+    <h2>Upload dataset & run prediction</h2>
+    {% if messages %}
+        {% for m in messages %}
+            <article class="{% if m.tags %}{{ m.tags }}{% endif %}">{{ m }}</article>
+        {% endfor %}
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="grid">
+            <div>
+                <label>Education Level
+                    {{ form.level }}
+                </label>
+            </div>
+            <div>
+                <label>Model
+                    {{ form.model_key }}
+                </label>
+            </div>
+        </div>
+        <label>Dataset file
+            {{ form.dataset }}
+            <small>{{ form.dataset.help_text }}</small>
+        </label>
+        <label>Optional ID column
+            {{ form.id_column }}
+            <small>{{ form.id_column.help_text }}</small>
+        </label>
+        <button type="submit">Predict</button>
+        <a href="{% url 'primary:predictions_list' %}" role="button" class="secondary">View all predictions</a>
+    </form>
+</main>
+</body>
+</html>

@@ -1,0 +1,226 @@
+---------------------------------------------------------------------------
+_RemoteTraceback                          Traceback (most recent call last)
+_RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "C:\Python310\lib\site-packages\joblib\_utils.py", line 72, in __call__
+    return self.func(**kwargs)
+  File "C:\Python310\lib\site-packages\joblib\parallel.py", line 598, in __call__
+    return [func(*args, **kwargs)
+  File "C:\Python310\lib\site-packages\joblib\parallel.py", line 598, in <listcomp>
+    return [func(*args, **kwargs)
+  File "C:\Python310\lib\site-packages\sklearn\utils\parallel.py", line 127, in __call__
+    return self.function(*args, **kwargs)
+  File "C:\Python310\lib\site-packages\sklearn\ensemble\_forest.py", line 188, in _parallel_build_trees
+    tree.fit(X, y, sample_weight=curr_sample_weight, check_input=False)
+  File "C:\Python310\lib\site-packages\sklearn\base.py", line 1152, in wrapper
+    return fit_method(estimator, *args, **kwargs)
+  File "C:\Python310\lib\site-packages\sklearn\tree\_classes.py", line 959, in fit
+    super()._fit(
+  File "C:\Python310\lib\site-packages\sklearn\tree\_classes.py", line 443, in _fit
+    builder.build(self.tree_, X, y, sample_weight, missing_values_in_feature_mask)
+  File "sklearn\tree\_tree.pyx", line 164, in sklearn.tree._tree.DepthFirstTreeBuilder.build
+  File "sklearn\tree\_tree.pyx", line 265, in sklearn.tree._tree.DepthFirstTreeBuilder.build
+  File "sklearn\tree\_tree.pyx", line 803, in sklearn.tree._tree.Tree._add_node
+  File "sklearn\tree\_tree.pyx", line 771, in sklearn.tree._tree.Tree._resize_c
+  File "sklearn\tree\_utils.pyx", line 37, in sklearn.tree._utils.safe_realloc
+MemoryError: could not allocate 2097152 bytes
+"""
+
+The above exception was the direct cause of the following exception:
+
+MemoryError                               Traceback (most recent call last)
+Cell In[15], line 2
+      1 pipe = build_pipeline(num_cols, cat_cols)
+----> 2 pipe.fit(X_train, y_train)
+      3 y_pred = pipe.predict(X_test)
+      4 print("\n=== A-Level → University Program (Calibrated RF) ===")
+
+File C:\Python310\lib\site-packages\sklearn\base.py:1152, in _fit_context.<locals>.decorator.<locals>.wrapper(estimator, *args, **kwargs)
+   1145     estimator._validate_params()
+   1147 with config_context(
+   1148     skip_parameter_validation=(
+   1149         prefer_skip_nested_validation or global_skip_validation
+   1150     )
+   1151 ):
+-> 1152     return fit_method(estimator, *args, **kwargs)
+
+File C:\Python310\lib\site-packages\sklearn\pipeline.py:427, in Pipeline.fit(self, X, y, **fit_params)
+    425     if self._final_estimator != "passthrough":
+    426         fit_params_last_step = fit_params_steps[self.steps[-1][0]]
+--> 427         self._final_estimator.fit(Xt, y, **fit_params_last_step)
+    429 return self
+
+File C:\Python310\lib\site-packages\sklearn\base.py:1152, in _fit_context.<locals>.decorator.<locals>.wrapper(estimator, *args, **kwargs)
+   1145     estimator._validate_params()
+   1147 with config_context(
+   1148     skip_parameter_validation=(
+   1149         prefer_skip_nested_validation or global_skip_validation
+   1150     )
+   1151 ):
+-> 1152     return fit_method(estimator, *args, **kwargs)
+
+File C:\Python310\lib\site-packages\sklearn\calibration.py:428, in CalibratedClassifierCV.fit(self, X, y, sample_weight, **fit_params)
+    426 if self.ensemble:
+    427     parallel = Parallel(n_jobs=self.n_jobs)
+--> 428     self.calibrated_classifiers_ = parallel(
+    429         delayed(_fit_classifier_calibrator_pair)(
+    430             clone(estimator),
+    431             X,
+    432             y,
+    433             train=train,
+    434             test=test,
+    435             method=self.method,
+    436             classes=self.classes_,
+    437             sample_weight=sample_weight,
+    438             fit_params=routed_params.estimator.fit,
+    439         )
+    440         for train, test in cv.split(X, y, **routed_params.splitter.split)
+    441     )
+    442 else:
+    443     this_estimator = clone(estimator)
+
+File C:\Python310\lib\site-packages\sklearn\utils\parallel.py:65, in Parallel.__call__(self, iterable)
+     60 config = get_config()
+     61 iterable_with_config = (
+     62     (_with_config(delayed_func, config), args, kwargs)
+     63     for delayed_func, args, kwargs in iterable
+     64 )
+---> 65 return super().__call__(iterable_with_config)
+
+File C:\Python310\lib\site-packages\joblib\parallel.py:1918, in Parallel.__call__(self, iterable)
+   1916     output = self._get_sequential_output(iterable)
+   1917     next(output)
+-> 1918     return output if self.return_generator else list(output)
+   1920 # Let's create an ID that uniquely identifies the current call. If the
+   1921 # call is interrupted early and that the same instance is immediately
+   1922 # re-used, this id will be used to prevent workers that were
+   1923 # concurrently finalizing a task from the previous call to run the
+   1924 # callback.
+   1925 with self._lock:
+
+File C:\Python310\lib\site-packages\joblib\parallel.py:1847, in Parallel._get_sequential_output(self, iterable)
+   1845 self.n_dispatched_batches += 1
+   1846 self.n_dispatched_tasks += 1
+-> 1847 res = func(*args, **kwargs)
+   1848 self.n_completed_tasks += 1
+   1849 self.print_progress()
+
+File C:\Python310\lib\site-packages\sklearn\utils\parallel.py:127, in _FuncWrapper.__call__(self, *args, **kwargs)
+    125     config = {}
+    126 with config_context(**config):
+--> 127     return self.function(*args, **kwargs)
+
+File C:\Python310\lib\site-packages\sklearn\calibration.py:619, in _fit_classifier_calibrator_pair(estimator, X, y, train, test, method, classes, sample_weight, fit_params)
+    616 X_train, y_train = _safe_indexing(X, train), _safe_indexing(y, train)
+    617 X_test, y_test = _safe_indexing(X, test), _safe_indexing(y, test)
+--> 619 estimator.fit(X_train, y_train, **fit_params_train)
+    621 n_classes = len(classes)
+    622 pred_method, method_name = _get_prediction_method(estimator)
+
+File C:\Python310\lib\site-packages\sklearn\base.py:1152, in _fit_context.<locals>.decorator.<locals>.wrapper(estimator, *args, **kwargs)
+   1145     estimator._validate_params()
+   1147 with config_context(
+   1148     skip_parameter_validation=(
+   1149         prefer_skip_nested_validation or global_skip_validation
+   1150     )
+   1151 ):
+-> 1152     return fit_method(estimator, *args, **kwargs)
+
+File C:\Python310\lib\site-packages\sklearn\ensemble\_forest.py:456, in BaseForest.fit(self, X, y, sample_weight)
+    445 trees = [
+    446     self._make_estimator(append=False, random_state=random_state)
+    447     for i in range(n_more_estimators)
+    448 ]
+    450 # Parallel loop: we prefer the threading backend as the Cython code
+    451 # for fitting the trees is internally releasing the Python GIL
+    452 # making threading more efficient than multiprocessing in
+    453 # that case. However, for joblib 0.12+ we respect any
+    454 # parallel_backend contexts set at a higher level,
+    455 # since correctness does not rely on using threads.
+--> 456 trees = Parallel(
+    457     n_jobs=self.n_jobs,
+    458     verbose=self.verbose,
+    459     prefer="threads",
+    460 )(
+    461     delayed(_parallel_build_trees)(
+    462         t,
+    463         self.bootstrap,
+    464         X,
+    465         y,
+    466         sample_weight,
+    467         i,
+    468         len(trees),
+    469         verbose=self.verbose,
+    470         class_weight=self.class_weight,
+    471         n_samples_bootstrap=n_samples_bootstrap,
+    472     )
+    473     for i, t in enumerate(trees)
+    474 )
+    476 # Collect newly grown trees
+    477 self.estimators_.extend(trees)
+
+File C:\Python310\lib\site-packages\sklearn\utils\parallel.py:65, in Parallel.__call__(self, iterable)
+     60 config = get_config()
+     61 iterable_with_config = (
+     62     (_with_config(delayed_func, config), args, kwargs)
+     63     for delayed_func, args, kwargs in iterable
+     64 )
+---> 65 return super().__call__(iterable_with_config)
+
+File C:\Python310\lib\site-packages\joblib\parallel.py:2007, in Parallel.__call__(self, iterable)
+   2001 # The first item from the output is blank, but it makes the interpreter
+   2002 # progress until it enters the Try/Except block of the generator and
+   2003 # reaches the first `yield` statement. This starts the asynchronous
+   2004 # dispatch of the tasks to the workers.
+   2005 next(output)
+-> 2007 return output if self.return_generator else list(output)
+
+File C:\Python310\lib\site-packages\joblib\parallel.py:1650, in Parallel._get_outputs(self, iterator, pre_dispatch)
+   1647     yield
+   1649     with self._backend.retrieval_context():
+-> 1650         yield from self._retrieve()
+   1652 except GeneratorExit:
+   1653     # The generator has been garbage collected before being fully
+   1654     # consumed. This aborts the remaining tasks if possible and warn
+   1655     # the user if necessary.
+   1656     self._exception = True
+
+File C:\Python310\lib\site-packages\joblib\parallel.py:1754, in Parallel._retrieve(self)
+   1747 while self._wait_retrieval():
+   1748 
+   1749     # If the callback thread of a worker has signaled that its task
+   1750     # triggered an exception, or if the retrieval loop has raised an
+   1751     # exception (e.g. `GeneratorExit`), exit the loop and surface the
+   1752     # worker traceback.
+   1753     if self._aborting:
+-> 1754         self._raise_error_fast()
+   1755         break
+   1757     # If the next job is not ready for retrieval yet, we just wait for
+   1758     # async callbacks to progress.
+
+File C:\Python310\lib\site-packages\joblib\parallel.py:1789, in Parallel._raise_error_fast(self)
+   1785 # If this error job exists, immediately raise the error by
+   1786 # calling get_result. This job might not exists if abort has been
+   1787 # called directly or if the generator is gc'ed.
+   1788 if error_job is not None:
+-> 1789     error_job.get_result(self.timeout)
+
+File C:\Python310\lib\site-packages\joblib\parallel.py:745, in BatchCompletionCallBack.get_result(self, timeout)
+    739 backend = self.parallel._backend
+    741 if backend.supports_retrieve_callback:
+    742     # We assume that the result has already been retrieved by the
+    743     # callback thread, and is stored internally. It's just waiting to
+    744     # be returned.
+--> 745     return self._return_or_raise()
+    747 # For other backends, the main thread needs to run the retrieval step.
+    748 try:
+
+File C:\Python310\lib\site-packages\joblib\parallel.py:763, in BatchCompletionCallBack._return_or_raise(self)
+    761 try:
+    762     if self.status == TASK_ERROR:
+--> 763         raise self._result
+    764     return self._result
+    765 finally:
+
+MemoryError: could not allocate 2097152 bytes

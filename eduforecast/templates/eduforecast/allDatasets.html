@@ -1,0 +1,176 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>All Datasets</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 24px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        select, input[type="number"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: .85rem;
+        }
+
+        .ok {
+            background: #e6ffed;
+            border: 1px solid #b7f5c7;
+        }
+
+        .pending {
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+        }
+
+        .muted {
+            color: #666;
+        }
+
+        .pagination {
+            margin-top: 16px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .btn {
+            text-decoration: none;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        .btn.disabled {
+            pointer-events: none;
+            opacity: .6;
+        }
+
+        .nav a {
+            color: #1f6feb;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="nav" style="margin-bottom:12px;">
+    <a href="{% url 'primary:upload' %}">+ Upload (Primary)</a> |
+    <a href="{% url 'levels:list' %}">Manage Levels</a>
+</div>
+
+<h1>All Uploaded Datasets</h1>
+
+<form class="toolbar" method="get">
+    <label>Level:
+        <select name="level" onchange="this.form.submit()">
+            <option value="">All levels</option>
+            {% for lvl in levels %}
+                <option value="{{ lvl.slug }}" {% if selected_level_slug == lvl.slug %}selected{% endif %}>
+                    {{ lvl.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <label>Page size:
+        <input type="number" min="5" max="100" name="page_size" value="{{ page_size }}" onchange="this.form.submit()">
+    </label>
+    <noscript>
+        <button type="submit">Apply</button>
+    </noscript>
+</form>
+
+<p class="muted">{{ total_count }} result{{ total_count|pluralize }}</p>
+
+<table>
+    <thead>
+    <tr>
+        <th>File</th>
+        <th>Level</th>
+        <th>Source</th>
+        <th>Uploaded</th>
+        <th>Status</th>
+        <th>Download</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for r in page_obj.object_list %}
+        <tr>
+            <td>{{ r.original_name }}</td>
+            <td>{{ r.level_name }}</td>
+            <td>{{ r.source }}</td>
+            <td>{{ r.uploaded_at|date:"Y-m-d H:i" }}</td>
+            <td>
+                {% if r.processed %}
+                    <span class="badge ok">Processed</span>
+                {% else %}
+                    <span class="badge pending">Saved</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if r.file_url %}
+                    <a href="{{ r.file_url }}" download>Download</a>
+                {% else %}
+                    <span class="muted">—</span>
+                {% endif %}
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="6">No datasets found.</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<div class="pagination">
+    {% if page_obj.has_previous %}
+        <a class="btn"
+           href="?{% if selected_level_slug %}level={{ selected_level_slug }}&{% endif %}page={{ page_obj.previous_page_number }}&page_size={{ page_size }}">&larr;
+            Prev</a>
+    {% else %}
+        <span class="btn disabled">&larr; Prev</span>
+    {% endif %}
+
+    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+    {% if page_obj.has_next %}
+        <a class="btn"
+           href="?{% if selected_level_slug %}level={{ selected_level_slug }}&{% endif %}page={{ page_obj.next_page_number }}&page_size={{ page_size }}">Next
+            &rarr;</a>
+    {% else %}
+        <span class="btn disabled">Next &rarr;</span>
+    {% endif %}
+</div>
+
+</body>
+</html>

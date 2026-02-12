@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Prediction Batches</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body class="container">
+<main>
+    <h2>Prediction Batches</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>#</th>
+            <th>Dataset</th>
+            <th>Model</th>
+            <th>Rows</th>
+            <th>Created</th>
+            <th>Download</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for b in batches %}
+            <tr>
+                <td><a href="{% url 'primary:prediction_detail' b.id %}">Batch {{ b.id }}</a></td>
+                <td>{{ b.dataset.original_name }} ({{ b.dataset.level }})</td>
+                <td>{{ b.model_key }}</td>
+                <td>{{ b.dataset.rows }}</td>
+                <td>{{ b.created_at|date:"Y-m-d H:i" }}</td>
+                <td>
+                    {% if b.predictions_csv %}
+                        <a href="{{ b.predictions_csv.url }}" download>CSV</a>
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="6">No prediction batches yet.</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <p><a href="{% url 'primary:upload_predict' %}" role="button">New Prediction</a></p>
+</main>
+</body>
+</html>

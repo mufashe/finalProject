@@ -1,0 +1,649 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>A-Level Programs Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            background: #f7f7f8
+        }
+
+        .cardx {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 12px;
+            background: #fff
+        }
+
+        .grid {
+            display: grid;
+            gap: 12px;
+            grid-template-columns:repeat(12, 1fr)
+        }
+
+        .col-12 {
+            grid-column: span 12
+        }
+
+        .col-8 {
+            grid-column: span 8
+        }
+
+        .col-6 {
+            grid-column: span 6
+        }
+
+        .col-4 {
+            grid-column: span 4
+        }
+
+        .small-muted {
+            font-size: .9rem;
+            color: #6b7280
+        }
+
+        .hidden {
+            display: none !important
+        }
+
+        .spinbox {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 26px 0;
+        }
+
+        .spinbox .pct {
+            margin-top: 6px;
+            font-size: .85rem;
+            color: #6b7280
+        }
+    </style>
+</head>
+<body>
+
+<div class="container py-3">
+    <h3 class="mb-1">A-Level Programs Dashboard</h3>
+    <div class="small-muted mb-3">Pick a saved predictions CSV, then filter.</div>
+
+    <!-- Controls -->
+    <div class="cardx mb-3" id="controls">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Prediction File</label>
+                <select id="fileSel" class="form-select" aria-label="Prediction file"></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Province</label>
+                <select id="provSel" class="form-select" multiple aria-label="Province"></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">District</label>
+                <select id="distSel" class="form-select" multiple aria-label="District"></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Gender</label>
+                <select id="genSel" class="form-select" multiple aria-label="Gender"></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">School Location</label>
+                <select id="locSel" class="form-select" multiple aria-label="School location"></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Year Min</label>
+                <select id="yearMin" class="form-select" aria-label="Year minimum"></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Year Max</label>
+                <select id="yearMax" class="form-select" aria-label="Year maximum"></select>
+            </div>
+            <div class="col-md-2">
+                <button id="btnApply" class="btn btn-primary mt-4">Apply Filters</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global progress (visible during render) -->
+    <div id="globalProgressWrap" class="cardx mb-3 hidden">
+        <div class="d-flex align-items-center justify-content-between mb-1">
+            <div class="small-muted">Rendering charts…</div>
+            <div id="globalPctLabel" class="small text-secondary">0%</div>
+        </div>
+        <div class="progress" role="progressbar" aria-label="Rendering progress">
+            <div id="globalProgress" class="progress-bar" style="width:0%"></div>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid mb-3">
+        <div class="cardx col-4">
+            <div class="small-muted">Records</div>
+            <div id="kpiTotal" class="fs-3">0</div>
+        </div>
+        <div class="cardx col-4">
+            <div class="small-muted">Predicted Programs</div>
+            <div id="kpiProgs" class="fs-3">0</div>
+        </div>
+        <div id="accBox" class="cardx col-4 hidden">
+            <div class="small-muted">Overall Accuracy (if GT present)</div>
+            <div id="kpiAcc" class="fs-3">—</div>
+        </div>
+    </div>
+
+    <!-- Charts (each with spinner + % label) -->
+    <div class="grid">
+        <div id="cardDist" class="cardx col-6">
+            <div class="small-muted">Program Distribution</div>
+            <div id="spinDist" class="spinbox">
+                <div class="spinner-border" role="status" aria-label="Loading"></div>
+                <div class="pct"><span id="pctDist">0%</span></div>
+            </div>
+            <canvas id="chartDist" height="170" class="hidden"></canvas>
+        </div>
+
+        <div id="cardConf" class="cardx col-6">
+            <div class="small-muted">Confidence Histogram (Top-1 Prob)</div>
+            <div id="spinConf" class="spinbox">
+                <div class="spinner-border" role="status" aria-label="Loading"></div>
+                <div class="pct"><span id="pctConf">0%</span></div>
+            </div>
+            <canvas id="chartConf" height="170" class="hidden"></canvas>
+        </div>
+
+        <div id="cardGender" class="cardx col-12">
+            <div class="small-muted">Programs by Gender</div>
+            <div id="spinGender" class="spinbox">
+                <div class="spinner-border" role="status" aria-label="Loading"></div>
+                <div class="pct"><span id="pctGender">0%</span></div>
+            </div>
+            <canvas id="chartGender" height="170" class="hidden"></canvas>
+        </div>
+
+        <div id="cardTS" class="cardx col-12">
+            <div class="small-muted">Program Share by Academic Year</div>
+            <div id="spinTS" class="spinbox">
+                <div class="spinner-border" role="status" aria-label="Loading"></div>
+                <div class="pct"><span id="pctTS">0%</span></div>
+            </div>
+            <canvas id="chartTS" height="190" class="hidden"></canvas>
+            <div id="tsEmpty" class="small-muted mt-1" style="display:none">
+                No time-series data found. Ensure the CSV has an Academic_Year (or Year/Exam_Year) and a predicted
+                column
+                (e.g., Pred_Program / Predicted_Program).
+            </div>
+        </div>
+
+        <div id="cardImpSubj" class="cardx col-6">
+            <div class="small-muted">Subject Importance (overall)</div>
+            <div id="spinImpSubj" class="spinbox">
+                <div class="spinner-border" role="status" aria-label="Loading"></div>
+                <div class="pct"><span id="pctImpSubj">0%</span></div>
+            </div>
+            <canvas id="chartImpSubj" height="180" class="hidden"></canvas>
+        </div>
+
+        <div id="cardImpYear" class="cardx col-6">
+            <div class="small-muted">Subject Importance by Year (S4/S5/S6)</div>
+            <div id="spinImpYear" class="spinbox">
+                <div class="spinner-border" role="status" aria-label="Loading"></div>
+                <div class="pct"><span id="pctImpYear">0%</span></div>
+            </div>
+            <canvas id="chartImpYear" height="180" class="hidden"></canvas>
+        </div>
+
+        <div id="cardImpOther" class="cardx col-12">
+            <div class="small-muted">Top Non-Subject Features</div>
+            <div id="spinImpOther" class="spinbox">
+                <div class="spinner-border" role="status" aria-label="Loading"></div>
+                <div class="pct"><span id="pctImpOther">0%</span></div>
+            </div>
+            <canvas id="chartImpOther" height="180" class="hidden"></canvas>
+        </div>
+
+        <div id="cardAccProg" class="cardx col-12 hidden">
+            <div class="small-muted">Accuracy by Ground-Truth Program</div>
+            <div id="spinAccProg" class="spinbox">
+                <div class="spinner-border" role="status" aria-label="Loading"></div>
+                <div class="pct"><span id="pctAccProg">0%</span></div>
+            </div>
+            <canvas id="chartAccProg" height="180" class="hidden"></canvas>
+        </div>
+    </div>
+
+    <div id="msg" class="alert alert-danger mt-3 hidden"></div>
+</div>
+
+<script>
+    /* Endpoints */
+    const FILES_URL = "{% url 'artifacts:alevel_prediction_files_api' %}";
+    const FILTERS_URL = "{% url 'artifacts:alevel_filters_api' %}";
+    const DATA_URL = "{% url 'artifacts:alevel_dashboard_data_api' %}";
+
+    /* Controls */
+    const fileSel = document.getElementById('fileSel');
+    const provSel = document.getElementById('provSel');
+    const distSel = document.getElementById('distSel');
+    const genSel = document.getElementById('genSel');
+    const locSel = document.getElementById('locSel');
+    const yearMin = document.getElementById('yearMin');
+    const yearMax = document.getElementById('yearMax');
+    const btnApply = document.getElementById('btnApply');
+
+    /* KPIs & Boxes */
+    const kpiTotal = document.getElementById('kpiTotal');
+    const kpiProgs = document.getElementById('kpiProgs');
+    const kpiAcc = document.getElementById('kpiAcc');
+    const accBox = document.getElementById('accBox');
+    const genderBox = document.getElementById('cardGender');
+    const alignBox = document.getElementById('cardAccProg');
+    const msg = document.getElementById('msg');
+    const tsEmptyEl = document.getElementById('tsEmpty');
+
+    /* Global progress */
+    const globalWrap = document.getElementById('globalProgressWrap');
+    const globalBar = document.getElementById('globalProgress');
+    const globalLbl = document.getElementById('globalPctLabel');
+
+    /* Per-card helpers */
+    function setCardBusy(spinId, canvasId, busy) {
+        const spin = document.getElementById(spinId);
+        const cvs = document.getElementById(canvasId);
+        if (busy) {
+            spin.classList.remove('hidden');
+            cvs.classList.add('hidden');
+        } else {
+            spin.classList.add('hidden');
+            cvs.classList.remove('hidden');
+        }
+    }
+
+    function setPct(id, pct) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = `${pct}%`;
+    }
+
+    function setGlobalPct(pct) {
+        globalBar.style.width = `${pct}%`;
+        globalLbl.textContent = `${pct}%`;
+    }
+
+    /* Chart instances */
+    let chartDist, chartConf, chartGender, chartImpSubj, chartImpYear, chartImpOther, chartAccProg, chartTS;
+
+    /* Abort controllers (avoid server broken pipes) */
+    let ctrlFilters = null;
+    let ctrlData = null;
+
+    function abortCtrl(ctrl) {
+        try {
+            ctrl?.abort();
+        } catch (e) {
+        }
+    }
+
+    /* Rendering token: cancel animations if a new render starts */
+    let renderToken = 0;
+
+    /* UI helpers */
+    function showMsg(t) {
+        msg.textContent = t;
+        msg.classList.remove('hidden');
+    }
+
+    function hideMsg() {
+        msg.classList.add('hidden');
+    }
+
+    function setOptions(sel, arr) {
+        sel.innerHTML = '';
+        (arr || []).forEach(v => {
+            const op = document.createElement('option');
+            op.value = op.textContent = String(v);
+            sel.appendChild(op);
+        });
+    }
+
+    function selVals(sel) {
+        return Array.from(sel.selectedOptions).map(o => o.value);
+    }
+
+    /* Animation helpers */
+    function raf() {
+        return new Promise(r => requestAnimationFrame(r));
+    }
+
+    async function animateNumber(updateFn, from, to, durationMs, myToken) {
+        const start = performance.now();
+        let cur = from;
+        while (true) {
+            if (myToken !== renderToken) return; // cancelled
+            const t = performance.now();
+            const p = Math.min(1, (t - start) / durationMs);
+            cur = Math.round(from + (to - from) * p);
+            updateFn(cur);
+            if (p >= 1) break;
+            await raf();
+        }
+    }
+
+    async function animateGlobalTo(targetPct, myToken, duration = 300) {
+        const startWidth = parseInt(globalBar.style.width || "0", 10) || 0;
+        await animateNumber((v) => {
+            setGlobalPct(v);
+            mirrorCardPct(v);
+        }, startWidth, targetPct, duration, myToken);
+    }
+
+    function mirrorCardPct(pct) {
+        ['pctDist', 'pctConf', 'pctGender', 'pctTS', 'pctImpSubj', 'pctImpYear', 'pctImpOther', 'pctAccProg']
+            .forEach(id => setPct(id, pct));
+    }
+
+    async function animateCardTo(id, target, myToken, duration = 300) {
+        const el = document.getElementById(id);
+        const from = parseInt((el?.textContent || "0").replace("%", ""), 10) || 0;
+        await animateNumber(v => setPct(id, v), from, target, duration, myToken);
+    }
+
+    /* Small async yield so the UI paints between charts */
+    const nextFrame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+
+    /* Fetch flows */
+    async function loadFiles() {
+        try {
+            const r = await fetch(FILES_URL);
+            const d = await r.json();
+            if (!r.ok || d.ok === false) throw new Error(d.error || "Failed to list files");
+            const names = (d.files || []).map(x => x.name);
+            setOptions(fileSel, names);
+            if (names.length) await loadFiltersAndData();
+        } catch (e) {
+            showMsg(e.message);
+        }
+    }
+
+    async function loadFiltersAndData() {
+        const fname = fileSel.value;
+        if (!fname) return;
+        abortCtrl(ctrlFilters);
+        ctrlFilters = new AbortController();
+        try {
+            hideMsg();
+            const u = new URL(FILTERS_URL, window.location.origin);
+            u.searchParams.set("file", fname);
+            const r = await fetch(u, {signal: ctrlFilters.signal});
+            const d = await r.json();
+            if (!r.ok || d.ok === false) throw new Error(d.error || "Failed to load filters");
+
+            const F = d.filters || {};
+            setOptions(provSel, F.Province || []);
+            setOptions(distSel, F.District || []);
+            setOptions(genSel, F.Gender || []);
+            setOptions(locSel, F.School_Location || []);
+
+            if (Array.isArray(d.years) && d.years.length) {
+                setOptions(yearMin, d.years);
+                setOptions(yearMax, d.years);
+                yearMin.value = d.years[0];
+                yearMax.value = d.years[d.years.length - 1];
+                yearMin.disabled = false;
+                yearMax.disabled = false;
+            } else if (d.year_range) {
+                const ys = [];
+                for (let y = d.year_range.min; y <= d.year_range.max; y++) ys.push(String(y));
+                setOptions(yearMin, ys);
+                setOptions(yearMax, ys);
+                yearMin.value = ys[0];
+                yearMax.value = ys[ys.length - 1];
+                yearMin.disabled = false;
+                yearMax.disabled = false;
+            } else {
+                setOptions(yearMin, []);
+                setOptions(yearMax, []);
+                yearMin.disabled = true;
+                yearMax.disabled = true;
+            }
+        } catch (e) {
+            if (e.name !== 'AbortError') showMsg(e.message);
+        }
+        await loadData();
+    }
+
+    async function loadData() {
+        const fname = fileSel.value;
+        if (!fname) return;
+
+        // Increment token to cancel any in-flight animations from previous render
+        const myToken = ++renderToken;
+
+        // Prepare all card spinners and global progress
+        ['spinDist', 'spinConf', 'spinGender', 'spinTS', 'spinImpSubj', 'spinImpYear', 'spinImpOther', 'spinAccProg']
+            .forEach(id => document.getElementById(id).classList.remove('hidden'));
+        ['chartDist', 'chartConf', 'chartGender', 'chartTS', 'chartImpSubj', 'chartImpYear', 'chartImpOther', 'chartAccProg']
+            .forEach(id => document.getElementById(id).classList.add('hidden'));
+        ['pctDist', 'pctConf', 'pctGender', 'pctTS', 'pctImpSubj', 'pctImpYear', 'pctImpOther', 'pctAccProg']
+            .forEach(id => setPct(id, 0));
+
+        globalWrap.classList.remove('hidden');
+        setGlobalPct(0);
+
+        abortCtrl(ctrlData);
+        ctrlData = new AbortController();
+
+        try {
+            hideMsg();
+            const u = new URL(DATA_URL, window.location.origin);
+            u.searchParams.set("file", fname);
+            selVals(provSel).forEach(v => u.searchParams.append("province", v));
+            selVals(distSel).forEach(v => u.searchParams.append("district", v));
+            selVals(genSel).forEach(v => u.searchParams.append("gender", v));
+            selVals(locSel).forEach(v => u.searchParams.append("school_location", v));
+            if (!yearMin.disabled && yearMin.value) u.searchParams.set("year_min", yearMin.value);
+            if (!yearMax.disabled && yearMax.value) u.searchParams.set("year_max", yearMax.value);
+
+            const r = await fetch(u, {signal: ctrlData.signal});
+            const d = await r.json();
+            if (!r.ok || d.ok === false) throw new Error(d.error || "Failed to load data");
+
+            // KPIs
+            kpiTotal.textContent = d.overall?.total ?? 0;
+            kpiProgs.textContent = (d.program_dist?.labels || []).length;
+            if (d.alignment && typeof d.alignment.overall_acc === "number") {
+                accBox.classList.remove('hidden');
+                kpiAcc.textContent = (d.alignment.overall_acc * 100).toFixed(1) + "%";
+            } else {
+                accBox.classList.add('hidden');
+            }
+
+            // Steps list (sequential). Each step animates card 0→100 and advances global %.
+            const steps = [
+                {name: 'dist', pctId: 'pctDist', spin: 'spinDist', canvas: 'chartDist', run: renderDist},
+                {name: 'conf', pctId: 'pctConf', spin: 'spinConf', canvas: 'chartConf', run: renderConf},
+                {name: 'gender', pctId: 'pctGender', spin: 'spinGender', canvas: 'chartGender', run: renderGender},
+                {name: 'ts', pctId: 'pctTS', spin: 'spinTS', canvas: 'chartTS', run: renderTS},
+                {name: 'impsubj', pctId: 'pctImpSubj', spin: 'spinImpSubj', canvas: 'chartImpSubj', run: renderImpSubj},
+                {name: 'impyear', pctId: 'pctImpYear', spin: 'spinImpYear', canvas: 'chartImpYear', run: renderImpYear},
+                {
+                    name: 'impoth',
+                    pctId: 'pctImpOther',
+                    spin: 'spinImpOther',
+                    canvas: 'chartImpOther',
+                    run: renderImpOther
+                },
+                {name: 'accprog', pctId: 'pctAccProg', spin: 'spinAccProg', canvas: 'chartAccProg', run: renderAccProg},
+            ];
+            const total = steps.length;
+
+            for (let i = 0; i < total; i++) {
+                const step = steps[i];
+                // Run chart render and local percent animation concurrently
+                await Promise.all([
+                    (async () => {
+                        try {
+                            await step.run(d, myToken);
+                        } catch (e) {
+                            console.warn(`Step ${step.name} error:`, e);
+                        }
+                    })(),
+                    animateCardTo(step.pctId, 100, myToken, 350)
+                ]);
+                // Hide spinner / show canvas happens inside each renderer; advance global
+                const targetPct = Math.round(((i + 1) / total) * 100);
+                await animateGlobalTo(targetPct, myToken, 350);
+                await nextFrame();
+                if (myToken !== renderToken) return; // cancelled by a newer request
+            }
+
+        } catch (e) {
+            if (e.name !== 'AbortError') showMsg(e.message);
+        } finally {
+            // Hide global progress shortly after finish
+            const my = myToken;
+            setTimeout(() => {
+                if (my === renderToken) globalWrap.classList.add('hidden');
+            }, 200);
+        }
+    }
+
+    /* === Chart renderers (each must hide spinner and show canvas) === */
+    async function renderDist(d) {
+        if (chartDist) chartDist.destroy();
+        const labels = d.program_dist?.labels || [], vals = d.program_dist?.counts || [];
+        chartDist = new Chart(document.getElementById('chartDist'), {
+            type: 'bar', data: {labels, datasets: [{label: 'Students', data: vals}]},
+            options: {responsive: true, plugins: {legend: {display: false}}}
+        });
+        setCardBusy('spinDist', 'chartDist', false);
+    }
+
+    async function renderConf(d) {
+        if (chartConf) chartConf.destroy();
+        const edges = d.confidence?.edges || [], counts = d.confidence?.counts || [];
+        const mids = [];
+        for (let i = 0; i < counts.length; i++) {
+            mids.push(((edges[i] || 0) + (edges[i + 1] || 0)) / 2);
+        }
+        chartConf = new Chart(document.getElementById('chartConf'), {
+            type: 'bar', data: {labels: mids.map(x => x.toFixed(2)), datasets: [{label: 'Count', data: counts}]},
+            options: {responsive: true, plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true}}}
+        });
+        setCardBusy('spinConf', 'chartConf', false);
+    }
+
+    async function renderGender(d) {
+        if (!d.program_by_gender) {
+            genderBox.classList.add('hidden');
+            return;
+        }
+        genderBox.classList.remove('hidden');
+        if (chartGender) chartGender.destroy();
+        const G = d.program_by_gender;
+        const datasets = G.programs.map((p, j) => ({label: p, data: G.matrix.map(row => row[j])}));
+        chartGender = new Chart(document.getElementById('chartGender'), {
+            type: 'bar', data: {labels: G.genders, datasets},
+            options: {responsive: true, scales: {x: {stacked: true}, y: {stacked: true, beginAtZero: true}}}
+        });
+        setCardBusy('spinGender', 'chartGender', false);
+    }
+
+    async function renderTS(d) {
+        if (chartTS) chartTS.destroy();
+        const ts = d.timeseries;
+        if (ts && Array.isArray(ts.years) && ts.years.length && Array.isArray(ts.programs) && ts.programs.length) {
+            tsEmptyEl.style.display = 'none';
+            const datasets = ts.programs.map((p, j) => ({
+                label: p, data: ts.matrix.map(row => Number(row[j] || 0)),
+                fill: false, tension: 0.25
+            }));
+            chartTS = new Chart(document.getElementById('chartTS'), {
+                type: 'line',
+                data: {labels: ts.years, datasets},
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {position: 'top'},
+                        tooltip: {callbacks: {label: (ctx) => `${ctx.dataset.label}: ${(ctx.parsed.y * 100).toFixed(1)}%`}}
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true, max: 1, ticks: {callback: v => `${(v * 100).toFixed(0)}%`},
+                            title: {display: true, text: 'Share of predictions'}
+                        },
+                        x: {title: {display: true, text: 'Academic Year'}}
+                    }
+                }
+            });
+        } else {
+            tsEmptyEl.style.display = 'block';
+        }
+        setCardBusy('spinTS', 'chartTS', false);
+    }
+
+    async function renderImpSubj(d) {
+        if (chartImpSubj) chartImpSubj.destroy();
+        chartImpSubj = new Chart(document.getElementById('chartImpSubj'), {
+            type: 'bar',
+            data: {
+                labels: d.importance?.subject?.labels || [],
+                datasets: [{label: 'Importance', data: d.importance?.subject?.scores || []}]
+            },
+            options: {responsive: true, plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true}}}
+        });
+        setCardBusy('spinImpSubj', 'chartImpSubj', false);
+    }
+
+    async function renderImpYear(d) {
+        if (chartImpYear) chartImpYear.destroy();
+        const mat = d.importance?.subject_year?.matrix || [];
+        const yrs = d.importance?.subject_year?.years || [];
+        const subs = d.importance?.subject_year?.subjects || [];
+        const ds = yrs.map((y, i) => ({label: y, data: mat[i] || []}));
+        chartImpYear = new Chart(document.getElementById('chartImpYear'), {
+            type: 'bar', data: {labels: subs, datasets: ds},
+            options: {responsive: true, scales: {y: {beginAtZero: true}}}
+        });
+        setCardBusy('spinImpYear', 'chartImpYear', false);
+    }
+
+    async function renderImpOther(d) {
+        if (chartImpOther) chartImpOther.destroy();
+        chartImpOther = new Chart(document.getElementById('chartImpOther'), {
+            type: 'bar',
+            data: {
+                labels: d.importance?.top_other?.labels || [],
+                datasets: [{label: 'Importance', data: d.importance?.top_other?.scores || []}]
+            },
+            options: {responsive: true, plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true}}}
+        });
+        setCardBusy('spinImpOther', 'chartImpOther', false);
+    }
+
+    async function renderAccProg(d) {
+        if (!d.alignment) {
+            alignBox.classList.add('hidden');
+            return;
+        }
+        alignBox.classList.remove('hidden');
+        if (chartAccProg) chartAccProg.destroy();
+        chartAccProg = new Chart(document.getElementById('chartAccProg'), {
+            type: 'bar',
+            data: {labels: d.alignment.labels, datasets: [{label: 'Accuracy', data: d.alignment.acc}]},
+            options: {responsive: true, plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true, max: 1}}}
+        });
+        setCardBusy('spinAccProg', 'chartAccProg', false);
+    }
+
+    /* Events */
+    btnApply.addEventListener('click', loadData);
+    fileSel.addEventListener('change', loadFiltersAndData);
+
+    /* Init */
+    loadFiles().catch(e => showMsg(e.message));
+</script>
+</body>
+</html>

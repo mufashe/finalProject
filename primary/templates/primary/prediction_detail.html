@@ -1,0 +1,121 @@
+{% load dict_extras %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Batch {{ batch.id }} Predictions</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+<body class="container">
+<main>
+    <h2>Batch {{ batch.id }} – {{ batch.model_key }}</h2>
+    <p>
+        Dataset: <strong>{{ batch.dataset.original_name }}</strong> ({{ batch.dataset.level }})<br>
+        Created: {{ batch.created_at|date:"Y-m-d H:i" }}<br>
+        {% if batch.predictions_csv %}Download: <a href="{{ batch.predictions_csv.url }}">CSV</a>{% endif %}
+    </p>
+    <section>
+        <h3>Batch Insights</h3>
+        <div class="grid">
+            <article>
+                <h4>Predicted Class Distribution</h4>
+                <canvas id="predDist"></canvas>
+            </article>
+            <article>
+                <h4>Confidence (Positive Class)</h4>
+                <canvas id="probaHist"></canvas>
+            </article>
+        </div>
+
+        {% if chart_json %}
+            <article>
+                <h4>Top Feature Importances (Random Forest)</h4>
+                <canvas id="featImp"></canvas>
+            </article>
+        {% endif %}
+    </section>
+
+    <table>
+        <thead>
+        <tr>
+            <th>#</th>
+            <th>External ID</th>
+            <th>Prediction</th>
+            {% if batch.classes_ and batch.classes_|length > 0 %}
+                {% for c in batch.classes_ %}
+                    <th>proba_{{ c }}</th>
+                {% endfor %}
+            {% endif %}
+        </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+            <tr>
+                <td>{{ r.index_in_file }}</td>
+                <td>{{ r.external_id|default:"—" }}</td>
+                <td><strong>{{ r.label }}</strong></td>
+                {% if batch.classes_ and r.proba %}
+                    {% for c in batch.classes_ %}
+                        {#                        <td>{{ r.proba.c|default:r.proba|get_item:c|default:"" }}</td>#}
+                        <td>{{ r.proba|get_item:c }}</td>
+                    {% endfor %}
+                {% endif %}
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="99">No rows stored.</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    {% if more_count and more_count > 0 %}
+        <p><em>Showing first 50 rows. Total more not shown: {{ more_count }}.</em></p>
+    {% endif %}
+
+    <p><a href="{% url 'primary:predictions_list' %}" role="button" class="secondary">Back to Batches</a></p>
+</main>
+</body>
+<script>
+    const data = {{ chart_json|safe }};
+
+    // 1) Predicted class distribution (bar)
+    new Chart(document.getElementById('predDist'), {
+        type: 'bar',
+        data: {
+            labels: data.predDist.labels,
+            datasets: [{label: 'Count', data: data.predDist.values}]
+        },
+        options: {responsive: true, plugins: {legend: {display: false}}}
+    });
+
+    // 2) Probability histogram (bar)
+    new Chart(document.getElementById('probaHist'), {
+        type: 'bar',
+        data: {
+            labels: data.probaHist.bins,
+            datasets: [{label: 'Rows', data: data.probaHist.values}]
+        },
+        options: {responsive: true, plugins: {legend: {display: false}}}
+    });
+
+    // 3) Feature importances (horizontal bar)
+    if (data.featImp.labels && data.featImp.labels.length > 0) {
+        new Chart(document.getElementById('featImp'), {
+            type: 'bar',
+            data: {
+                labels: data.featImp.labels,
+                datasets: [{label: 'Importance', data: data.featImp.values}]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                plugins: {legend: {display: false}},
+                scales: {x: {beginAtZero: true}}
+            }
+        });
+    }
+</script>
+
+</html>

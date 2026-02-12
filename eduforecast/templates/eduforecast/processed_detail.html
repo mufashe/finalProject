@@ -1,0 +1,12 @@
+{% extends "eduforecast/base.html" %}
+{% block content %}
+    <div class="d-flex align-items-center mb-3">
+        <h5 class="me-auto m-0">Processed: {{ obj.original_filename }}</h5>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ obj.processed_file.url }}" download>Download CSV</a>
+    </div>
+    <div class="card shadow-sm">
+        <div class="card-body table-responsive">
+            {{ preview_html|safe }}
+        </div>
+    </div>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "eduforecast/base.html" %}
+{% block content %}
+    <div class="card shadow-sm">
+        <div class="card-header">Uploaded Datasets</div>
+        <div class="card-body p-0">
+            <table class="table table-sm table-striped m-0">
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>File</th>
+                    <th>Rows</th>
+                    <th>Cols</th>
+                    <th>Uploaded</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for d in datasets %}
+                    <tr>
+                        <td>{{ d.id }}</td>
+                        <td>{{ d.original_filename }}</td>
+                        <td>{{ d.n_rows }}</td>
+                        <td>{{ d.n_cols }}</td>
+                        <td>{{ d.uploaded_at|date:"Y-m-d H:i" }}</td>
+                        <td><a class="btn btn-sm btn-outline-primary" href="{% url 'uploader:detail' d.pk %}">Open</a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center p-3">No datasets yet.</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

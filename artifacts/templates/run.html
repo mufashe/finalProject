@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Run Prediction / Forecast</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 24px
+        }
+
+        .messages li {
+            list-style: none;
+            margin: 6px 0;
+            padding: 8px;
+            border-radius: 8px
+        }
+
+        .success {
+            background: #e6ffed;
+            border: 1px solid #b7f5c7
+        }
+
+        .error {
+            background: #ffecec;
+            border: 1px solid #ffb3b3
+        }
+
+        .nav a {
+            color: #1f6feb;
+            text-decoration: none
+        }
+
+        label {
+            font-weight: 600;
+            display: block;
+            margin-top: 10px
+        }
+
+        select, input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 8px
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns:1fr 1fr;
+            gap: 16px
+        }
+    </style>
+</head>
+<body>
+<div class="nav" style="margin-bottom:12px;">
+    <a href="{% url 'artifacts:list' %}">&larr; Back to Models</a> |
+    <a href="{% url 'pred:datasets' %}">View Datasets</a>
+</div>
+
+{% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+            <li class="{{ message.tags }}">{{ message }}</li>{% endfor %}
+    </ul>
+{% endif %}
+
+<h1>Run Prediction / Forecast</h1>
+<form method="post">
+    {% csrf_token %}
+    <div class="row">
+        <div>
+            <label>Level (filter datasets)</label>
+            {{ form.level }}
+        </div>
+        <div>
+            <label>Saved Model</label>
+            {{ form.artifact }}
+        </div>
+    </div>
+
+    <label>Dataset (uploaded file)</label>
+    {{ form.dataset }}
+
+    <div class="row">
+        <div>
+            <label>Top-K (classification)</label>
+            {{ form.top_k }}
+        </div>
+        <div>
+            <label>Horizon (forecasting)</label>
+            {{ form.horizon }}
+        </div>
+    </div>
+
+    <div style="margin-top:12px;">
+        <button type="submit">Run</button>
+    </div>
+</form>
+</body>
+</html>
+<script>
+    const levelSelect = document.getElementById("id_level");
+    if (levelSelect) {
+        levelSelect.addEventListener("change", () => {
+            const form = levelSelect.form;
+            // Submit as GET so users can bookmark/share the filtered page
+            const params = new URLSearchParams(new FormData(form));
+            window.location.search = params.toString();
+        });
+    }
+</script>

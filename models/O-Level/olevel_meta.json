@@ -1,0 +1,62 @@
+{
+  "subjects": [
+    "Mathematics",
+    "Physics",
+    "Chemistry",
+    "Biology",
+    "Geography",
+    "History",
+    "Economics",
+    "English",
+    "Kinyarwanda",
+    "ICT"
+  ],
+  "years": [
+    "S1",
+    "S2",
+    "S3"
+  ],
+  "target": "A_Level_Stream",
+  "classes": [
+    "HEG",
+    "HEL",
+    "HGL",
+    "ICT",
+    "MCE",
+    "MEG",
+    "PCB",
+    "PCM"
+  ],
+  "required_columns": [
+    "S1_Mathematics",
+    "S1_Physics",
+    "S1_Chemistry",
+    "S1_Biology",
+    "S1_Geography",
+    "S1_History",
+    "S1_Economics",
+    "S1_English",
+    "S1_Kinyarwanda",
+    "S1_ICT",
+    "S2_Mathematics",
+    "S2_Physics",
+    "S2_Chemistry",
+    "S2_Biology",
+    "S2_Geography",
+    "S2_History",
+    "S2_Economics",
+    "S2_English",
+    "S2_Kinyarwanda",
+    "S2_ICT",
+    "S3_Mathematics",
+    "S3_Physics",
+    "S3_Chemistry",
+    "S3_Biology",
+    "S3_Geography",
+    "S3_History",
+    "S3_Economics",
+    "S3_English",
+    "S3_Kinyarwanda",
+    "S3_ICT"
+  ]
+}

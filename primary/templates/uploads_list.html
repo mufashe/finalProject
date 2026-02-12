@@ -1,0 +1,90 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Primary Uploads</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 24px;
+        }
+
+        .nav {
+            margin-bottom: 16px;
+        }
+
+        .nav a {
+            text-decoration: none;
+            color: #1f6feb;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+        }
+
+        .ok {
+            background: #e6ffed;
+            border: 1px solid #b7f5c7;
+        }
+
+        .pending {
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+        }
+    </style>
+</head>
+<body>
+<div class="nav">
+    <a href="{% url 'primary:upload' %}">+ Upload another file</a>
+</div>
+<h1>Primary Uploads</h1>
+<table>
+    <thead>
+    <tr>
+        <th>File</th>
+        <th>Level</th>
+        <th>Uploaded</th>
+        <th>Status</th>
+        <th>Notes</th>
+        <th>Download</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for u in uploads %}
+        <tr>
+            <td>{{ u.original_name }}</td>
+            <td>{{ u.level.name }}</td>
+            <td>{{ u.uploaded_at|date:"Y-m-d H:i" }}</td>
+            <td>
+                {% if u.processed %}
+                    <span class="badge ok">Processed</span>
+                {% else %}
+                    <span class="badge pending">Saved</span>
+                {% endif %}
+            </td>
+            <td>{{ u.notes|default:"—" }}</td>
+            <td><a href="{{ u.file.url }}" download>Download</a></td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="5">No uploads yet.</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</body>
+</html>

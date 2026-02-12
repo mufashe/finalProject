@@ -1,0 +1,128 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Upload Primary Excel</title>
+    <link rel="stylesheet" href="{% static 'css/site.css' %}">
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 24px;
+        }
+
+        .card {
+            max-width: 640px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+        }
+
+        .messages li {
+            margin: 8px 0;
+            padding: 10px;
+            border-radius: 8px;
+            list-style: none;
+        }
+
+        .messages .success {
+            background: #e6ffed;
+            border: 1px solid #b7f5c7;
+        }
+
+        .messages .error {
+            background: #ffecec;
+            border: 1px solid #ffb3b3;
+        }
+
+        .messages .warning {
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+        }
+
+        .btn {
+            background: #1f6feb;
+            color: #fff;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .btn:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+        }
+
+        input[type="file"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            width: 100%;
+        }
+
+        textarea {
+            width: 100%;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 8px;
+        }
+
+        label {
+            font-weight: 600;
+            margin-top: 12px;
+            display: block;
+        }
+
+        .hint {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .nav {
+            margin-bottom: 16px;
+        }
+
+        .nav a {
+            text-decoration: none;
+            color: #1f6feb;
+        }
+    </style>
+</head>
+<body>
+<div class="nav"><a href="{% url 'primary:uploads_list' %}">&larr; View previous uploads</a></div>
+
+{% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+            <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<div class="card">
+    <h1>Upload Primary Excel</h1>
+    <p class="hint">Accepted: .xlsx / .xls (max 10 MB)</p>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <label for="id_level">Level</label>
+        {{ form.level }}
+
+
+        <label for="id_file">Excel file</label>
+        {{ form.file }}
+        <label for="id_notes">Notes (optional)</label>
+        {{ form.notes }}
+        <div style="margin-top: 16px;">
+            <button class="btn" type="submit">Upload</button>
+        </div>
+        {% if form.errors %}
+            <div style="margin-top: 12px; color: #b00020;">
+                {{ form.errors }}
+            </div>
+        {% endif %}
+    </form>
+</div>
+</body>
+</html>

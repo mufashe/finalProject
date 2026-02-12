@@ -1,0 +1,164 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Manage Education Levels</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 24px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 24px;
+        }
+
+        .card {
+            padding: 16px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+        }
+
+        label {
+            font-weight: 600;
+            display: block;
+            margin-top: 10px;
+        }
+
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+
+        .btn {
+            background: #1f6feb;
+            color: #fff;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .btn.secondary {
+            background: #6c757d;
+        }
+
+        .btn.warn {
+            background: #c0342f;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .messages li {
+            margin: 8px 0;
+            padding: 10px;
+            border-radius: 8px;
+            list-style: none;
+        }
+
+        .messages .success {
+            background: #e6ffed;
+            border: 1px solid #b7f5c7;
+        }
+
+        .messages .error {
+            background: #ffecec;
+            border: 1px solid #ffb3b3;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Education Levels</h1>
+
+{% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+            <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<div class="grid">
+    <div class="card">
+        <h2 style="margin-top:0;">
+            {% if mode == "edit" %}Edit Level{% else %}Add New Level{% endif %}
+        </h2>
+        <form method="post">
+            {% csrf_token %}
+            <label for="id_name">Name</label>
+            {{ form.name }}
+            <small>Examples: Primary, O-Level, A-Level</small>
+
+            <label for="id_slug">Slug</label>
+            {{ form.slug }}
+            <small>Lowercase, URL friendly. Auto-filled from name if left blank (e.g., <code>primary</code>).</small>
+
+            <label for="id_description">Description</label>
+            {{ form.description }}
+
+            <div style="margin-top: 14px;">
+                <button type="submit" class="btn">
+                    {% if mode == "edit" %}Save Changes{% else %}Save Level{% endif %}
+                </button>
+                {% if mode == "edit" %}
+                    <a href="{% url 'levels:list' %}" class="btn secondary"
+                       style="margin-left: 8px; text-decoration:none; display:inline-block;">Cancel</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top:0;">Saved Levels</h2>
+        <table>
+            <thead>
+            <tr>
+                <th style="width:20%;">Name</th>
+                <th style="width:20%;">Slug</th>
+                <th>Description</th>
+                <th style="width:20%;">Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for lvl in levels %}
+                <tr>
+                    <td>{{ lvl.name }}</td>
+                    <td><code>{{ lvl.slug }}</code></td>
+                    <td>{{ lvl.description|default:"—" }}</td>
+                    <td>
+                        <a class="btn secondary" href="{% url 'levels:edit' lvl.pk %}">Edit</a>
+                        <form method="post" action="{% url 'levels:delete' lvl.pk %}" style="display:inline;"
+                              onsubmit="return confirm('Delete {{ lvl.name }}? This cannot be undone.');">
+                            {% csrf_token %}
+                            <button class="btn warn" type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="4">No levels saved yet.</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,367 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>A-Level: Predict University Program (Single Student)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            background: #f7f7f8
+        }
+
+        .subject-grid {
+            display: grid;
+            grid-template-columns:repeat(3, 1fr);
+            gap: 12px
+        }
+
+        @media (max-width: 992px) {
+            .subject-grid {
+                grid-template-columns:1fr
+            }
+        }
+
+        .year-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 12px;
+            background: #fff
+        }
+
+        .year-title {
+            font-weight: 600;
+            margin-bottom: 8px
+        }
+
+        .input-row {
+            display: grid;
+            grid-template-columns:1fr 140px;
+            gap: 8px;
+            align-items: center
+        }
+
+        .hidden {
+            display: none !important
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace
+        }
+
+        .result-card {
+            border: 1px solid #d1fae5;
+            background: #f0fdf4;
+            border-radius: 12px
+        }
+    </style>
+</head>
+<body>
+<div class="container py-4">
+    <h3 class="mb-1">A-Level → Predict University Program</h3>
+    <div class="text-secondary mb-3">Enter S4–S6 subject scores and context features for one student.</div>
+
+    <!-- Controls -->
+    <div class="card p-3 mb-3">
+        <div class="d-flex flex-wrap gap-2">
+            <button id="btnPredict" class="btn btn-primary">Predict</button>
+            <button id="btnClear" class="btn btn-outline-secondary">Clear</button>
+            <button id="btnDemo" class="btn btn-outline-info">Demo fill</button>
+        </div>
+    </div>
+
+    <!-- Dynamic cards -->
+    <div class="subject-grid" id="grid"></div>
+
+    <!-- Result -->
+    <div id="result" class="result-card p-3 mt-3 hidden">
+        <h5 class="mb-2">Prediction</h5>
+        <div class="row">
+            <div class="col-lg-4">
+                <div><span class="text-secondary">Program:</span> <strong id="predName"></strong></div>
+                <div class="small text-secondary">Top-K:</div>
+                <div id="topList" class="mono"></div>
+            </div>
+            <div class="col-lg-8">
+                <canvas id="chart" height="140"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="msg" class="alert alert-danger mt-3 hidden"></div>
+</div>
+
+<script>
+    const API = "{% url 'arti:predict_one_alevel' %}";
+
+    const grid = document.getElementById('grid');
+    const btnPredict = document.getElementById('btnPredict');
+    const btnClear = document.getElementById('btnClear');
+    const btnDemo = document.getElementById('btnDemo');
+    const msg = document.getElementById('msg');
+    const resultBox = document.getElementById('result');
+    const predName = document.getElementById('predName');
+    const topList = document.getElementById('topList');
+    let chart;
+
+    // Holds input elements keyed by ORIGINAL column name from the API
+    const inputs = {};
+
+    function showMsg(t) {
+        msg.textContent = t;
+        msg.classList.remove('hidden');
+    }
+
+    function hideMsg() {
+        msg.classList.add('hidden');
+    }
+
+    function showResult() {
+        resultBox.classList.remove('hidden');
+    }
+
+    function hideResult() {
+        resultBox.classList.add('hidden');
+    }
+
+    // ---------- Normalization helpers ----------
+    const norm = s => (s || "").toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const hasYearTag = (name, tag) => {
+        // matches S4_, _S4, 'S4 ' etc. Case-insensitive
+        const n = name.toString();
+        const re = new RegExp(`(^${tag}[^a-z0-9])|([^a-z0-9]${tag}$)`, 'i');
+        return re.test(n) || n.toUpperCase().startsWith(tag + '_');
+    };
+    const pretty = s => s.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+
+    // Context synonyms (normalized)
+    const CONTEXT_MAP = {
+        schoollocation: ['schoollocation', 'school_loc', 'schoolloc', 'location', 'schooltown'],
+        residencelocation: ['residencelocation', 'residence', 'home_location', 'homelocation', 'village'],
+        isboarding: ['isboarding', 'boarding', 'boarder'],
+        schooltype: ['schooltype', 'typeschool', 'school_category'],
+        parentstatus: ['parentstatus', 'parentsstatus', 'guardianstatus'],
+        gender: ['gender', 'sex'],
+        haselectricity: ['haselectricity', 'electricity', 'haspower', 'power'],
+        distancetoschoolkm: ['distancetoschoolkm', 'distancetoschool', 'distancekm', 'distance_km'],
+        revisionhoursperday: ['revisionhoursperday', 'revisionhours', 'studyhours', 'hoursperday', 'studytimes']
+    };
+
+    function isContext(name) {
+        const n = norm(name);
+        for (const key in CONTEXT_MAP) {
+            const aliases = [key, ...CONTEXT_MAP[key]];
+            if (aliases.some(a => n.includes(a))) return true;
+        }
+        return false;
+    }
+
+    function whichContextKey(name) {
+        const n = norm(name);
+        for (const key in CONTEXT_MAP) {
+            const aliases = [key, ...CONTEXT_MAP[key]];
+            if (aliases.some(a => n.includes(a))) return key;
+        }
+        return null;
+    }
+
+    function detectYear(name) {
+        if (hasYearTag(name, 'S4')) return 'S4';
+        if (hasYearTag(name, 'S5')) return 'S5';
+        if (hasYearTag(name, 'S6')) return 'S6';
+        return null;
+    }
+
+    function stripYearFromLabel(col, yearTag) {
+        // Turn "S4_Mathematics" or "Math_S4" or "Math S4" into "Mathematics" / "Math"
+        let s = col;
+        const rePrefix = new RegExp(`^${yearTag}[^a-z0-9]+`, 'i');
+        const reSuffix = new RegExp(`[^a-z0-9]+${yearTag}$`, 'i');
+        s = s.replace(rePrefix, '').replace(reSuffix, '');
+        return pretty(s);
+    }
+
+    // ---------- UI builders ----------
+    function buildCard(title, fields, labelFn) {
+        if (!fields.length) return null;
+        const card = document.createElement('div');
+        card.className = 'year-card';
+        const h = document.createElement('div');
+        h.className = 'year-title';
+        h.textContent = title;
+        card.appendChild(h);
+
+        fields.forEach(col => {
+            const row = document.createElement('div');
+            row.className = 'input-row mb-2';
+
+            const lab = document.createElement('label');
+            lab.className = 'form-label m-0';
+            lab.textContent = labelFn ? labelFn(col) : pretty(col);
+
+            const inp = document.createElement('input');
+            // heuristic: numeric for subjects/distances/hours; text otherwise
+            const isNumericLike = /score|mark|point|grade|dist|hour|km|math|phys|chem|bio|eng|geo|hist|econ|ict/i.test(col) ||
+                !!detectYear(col);
+            inp.type = isNumericLike ? 'number' : 'text';
+            if (isNumericLike) {
+                inp.step = '0.01';
+                inp.min = '0';
+                inp.max = '100';
+            }
+            inp.className = 'form-control';
+            inp.placeholder = isNumericLike ? 'e.g., 75' : 'e.g., Urban';
+
+            inputs[col] = inp;
+            row.appendChild(lab);
+            row.appendChild(inp);
+            card.appendChild(row);
+        });
+
+        return card;
+    }
+
+    async function buildForm() {
+        try {
+            const r = await fetch(API, {method: 'GET'});
+            const d = await r.json();
+            if (!r.ok || d.ok === false) throw new Error(d.error || 'Failed to load schema');
+
+            const req = (d.required_columns || []).slice();
+            // buckets
+            const s4 = [], s5 = [], s6 = [], context = [], others = [];
+
+            req.forEach(col => {
+                const y = detectYear(col);
+                if (y === 'S4') s4.push(col);
+                else if (y === 'S5') s5.push(col);
+                else if (y === 'S6') s6.push(col);
+                else if (isContext(col)) context.push(col);
+                else others.push(col);
+            });
+
+            // Stable ordering: context first, then S4/S5/S6, then others
+            grid.innerHTML = '';
+
+            const ctxCard = buildCard('Student Context', context, null);
+            if (ctxCard) grid.appendChild(ctxCard);
+
+            const s4Card = buildCard('S4 Subjects', s4, (c) => stripYearFromLabel(c, 'S4'));
+            if (s4Card) grid.appendChild(s4Card);
+
+            const s5Card = buildCard('S5 Subjects', s5, (c) => stripYearFromLabel(c, 'S5'));
+            if (s5Card) grid.appendChild(s5Card);
+
+            const s6Card = buildCard('S6 Subjects', s6, (c) => stripYearFromLabel(c, 'S6'));
+            if (s6Card) grid.appendChild(s6Card);
+
+            const otherCard = buildCard('Other Features', others, null);
+            if (otherCard) grid.appendChild(otherCard);
+
+            hideMsg();
+        } catch (e) {
+            showMsg(e.message);
+        }
+    }
+
+    // ---------- Predict / Clear / Demo ----------
+    function payloadFromInputs() {
+        const obj = {};
+        for (const [k, el] of Object.entries(inputs)) {
+            const v = el.value.trim();
+            if (v === '') throw new Error(`Missing value for ${k}`);
+            const num = Number(v);
+            obj[k] = Number.isNaN(num) ? v : num;
+        }
+        return obj;
+    }
+
+    async function predict() {
+        hideMsg();
+        hideResult();
+        try {
+            const payload = payloadFromInputs();
+            const r = await fetch(API, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const d = await r.json();
+            if (!r.ok || d.ok === false) throw new Error(d.error || 'Prediction failed');
+
+            predName.textContent = d.pred_program;
+            topList.textContent = (d.topk_programs || []).map((p, i) => `${p}:${(d.topk_probs?.[i] || 0).toFixed(3)}`).join('  |  ');
+
+            const ctx = document.getElementById('chart');
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {labels: d.topk_programs, datasets: [{label: 'Probability', data: d.topk_probs}]},
+                options: {plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true, max: 1}}}
+            });
+
+            showResult();
+        } catch (e) {
+            showMsg(e.message);
+        }
+    }
+
+    function clearAll() {
+        Object.values(inputs).forEach(inp => inp.value = '');
+        hideMsg();
+        hideResult();
+    }
+
+    function demoFill() {
+        // Subject base (S4) 55–85, gentle upward trend into S5,S6
+        const r = (a, b) => Math.round(a + Math.random() * (b - a));
+        const baseBySubject = {};
+        // Walk all inputs; detect year & subject-ish; assign consistent base per subject across years
+        for (const key of Object.keys(inputs)) {
+            const y = detectYear(key);
+            if (!y) continue;
+            // label without year
+            const subj = stripYearFromLabel(key, y).toLowerCase();
+            if (!(subj in baseBySubject)) baseBySubject[subj] = r(55, 85);
+        }
+        for (const [key, el] of Object.entries(inputs)) {
+            const y = detectYear(key);
+            const k = whichContextKey(key);
+            if (y) { // subjects
+                const subj = stripYearFromLabel(key, y).toLowerCase();
+                const base = baseBySubject[subj] ?? r(55, 85);
+                const bump = y === 'S4' ? r(-5, 5) : y === 'S5' ? r(0, 8) : r(3, 12);
+                const val = Math.max(0, Math.min(100, base + bump));
+                el.value = String(val);
+            } else if (k) { // context: put plausible defaults
+                if (k === 'distancetoschoolkm') el.value = String(r(0, 10));
+                else if (k === 'revisionhoursperday') el.value = String(r(0, 6));
+                else if (k === 'gender') el.value = (Math.random() < 0.5 ? 'Male' : 'Female');
+                else if (k === 'schoollocation' || k === 'residencelocation') el.value = (Math.random() < 0.5 ? 'Urban' : 'Rural');
+                else if (k === 'isboarding') el.value = (Math.random() < 0.5 ? 'Yes' : 'No');
+                else if (k === 'haselectricity') el.value = (Math.random() < 0.8 ? 'Yes' : 'No');
+                else if (k === 'schooltype') el.value = (Math.random() < 0.5 ? 'Public' : 'Private');
+                else if (k === 'parentstatus') el.value = 'Both';
+                else el.value = el.value || 'value';
+            } else {
+                // other features: best effort numeric 0-100 or text placeholder
+                if (inputs[key].type === 'number') el.value = String(r(40, 95));
+                else el.value = el.value || 'value';
+            }
+        }
+        hideMsg();
+        hideResult();
+    }
+
+    // Events
+    btnPredict.addEventListener('click', predict);
+    btnClear.addEventListener('click', clearAll);
+    btnDemo.addEventListener('click', demoFill);
+
+    // Init
+    buildForm();
+</script>
+</body>
+</html>

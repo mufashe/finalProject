@@ -1,0 +1,23 @@
+{% extends "eduforecast/base.html" %}
+{% block content %}
+    <div class="d-flex align-items-center mb-3">
+        <h5 class="me-auto m-0">Raw Dataset: {{ obj.original_filename }}</h5>
+        <a class="btn btn-sm btn-success" href="{% url 'uploader:process' obj.pk %}">Process</a>
+    </div>
+
+    <div class="mb-2 text-muted small">Rows: {{ obj.n_rows }} | Cols: {{ obj.n_cols }}</div>
+
+    <div class="card shadow-sm">
+        <div class="card-body table-responsive">
+            {{ preview_html|safe }}
+        </div>
+    </div>
+
+    {% if obj.processed_file %}
+        <div class="alert alert-info mt-3">
+            Processed file available:
+            <a class="btn btn-sm btn-outline-primary" href="{% url 'uploader:processed_detail' obj.pk %}">View</a>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ obj.processed_file.url }}" download>Download CSV</a>
+        </div>
+    {% endif %}
+{% endblock %}

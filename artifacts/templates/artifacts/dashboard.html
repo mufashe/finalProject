@@ -1,0 +1,743 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>EduForecast — Predictions Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body {
+            background: #f8fafc;
+        }
+
+        .card {
+            border: 0;
+            border-radius: 16px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.06);
+        }
+
+        .metric {
+            font-size: 1.4rem;
+            font-weight: 700;
+        }
+
+        .subtle {
+            color: #6b7280;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 16px;
+        }
+
+        .grid-charts {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+
+        .grid-1 {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 1200px) {
+            .grid-2 {
+                grid-template-columns:1fr
+            }
+
+            .grid-charts {
+                grid-template-columns:1fr
+            }
+        }
+
+        canvas {
+            max-height: 420px;
+        }
+
+        #mapProv, #mapDist {
+            height: 440px;
+            border-radius: 12px;
+        }
+
+        .legend {
+            background: white;
+            padding: 6px 8px;
+            font: 12px/14px Arial, Helvetica, sans-serif;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+        }
+
+        .legend i {
+            width: 14px;
+            height: 14px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body class="p-4">
+<div class="container-fluid">
+
+    <!-- Header row with file dropdown -->
+    <div class="d-flex flex-wrap justify-content-between align-items-end mb-3 gap-2">
+        <div>
+            <h3 class="mb-1">Predictions Dashboard</h3>
+            <div class="subtle">Pick a file and apply filters. Charts, maps and trends will update.</div>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <a href="{% url 'arti:dashboard_page' %}" class="btn btn-outline-secondary">Refresh</a>
+            <div>
+                <label class="form-label mb-1">Predictions file</label>
+                <select id="fileSelect" class="form-select">
+                    <option>Loading…</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid-2">
+        <!-- Filters -->
+        <div class="card p-3">
+            <h6 class="mb-3">Filters</h6>
+
+            <div class="mb-3">
+                <label class="form-label">Province</label>
+                <select id="fProvince" class="form-select" multiple></select>
+                <div class="form-text">Ctrl/Cmd-click to select multiple</div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">District</label>
+                <select id="fDistrict" class="form-select" multiple></select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Gender</label>
+                <select id="fGender" class="form-select" multiple></select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">School Location</label>
+                <select id="fLocation" class="form-select" multiple></select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Academic Year</label>
+                <div class="d-flex gap-2">
+                    <select id="fYearMin" class="form-select"></select>
+                    <select id="fYearMax" class="form-select"></select>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button id="applyBtn" class="btn btn-primary w-50">Apply</button>
+                <button id="clearBtn" class="btn btn-outline-secondary w-50">Clear</button>
+            </div>
+        </div>
+
+        <!-- Right content -->
+        <div>
+            <!-- KPIs -->
+            <div class="grid-charts mb-3">
+                <div class="card p-3">
+                    <div class="subtle">Selected file</div>
+                    <div id="kpi-file" class="metric">—</div>
+                </div>
+                <div class="card p-3">
+                    <div class="subtle">Overall Pass Rate</div>
+                    <div id="kpi-pass" class="metric">—</div>
+                </div>
+            </div>
+
+            <!-- Maps -->
+            <div class="grid-charts mb-3">
+                <div class="card p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-2">Province Map — Pass Rate</h6>
+                        <small class="text-muted">Click a region to filter</small>
+                    </div>
+                    <div id="mapProv"></div>
+                </div>
+                <div class="card p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-2">District Map — Pass Rate</h6>
+                        <small class="text-muted">Click a region to filter</small>
+                    </div>
+                    <div id="mapDist"></div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="grid-charts mb-3">
+                <div class="card p-3">
+                    <h6 class="mb-3">Pass Rate by Province</h6>
+                    <canvas id="provinceChart"></canvas>
+                </div>
+                <div class="card p-3">
+                    <h6 class="mb-3">Top Districts — Pass Rate</h6>
+                    <canvas id="districtChart"></canvas>
+                </div>
+            </div>
+
+            <div class="grid-charts mb-3">
+                <div class="card p-3">
+                    <h6 class="mb-3">Pass Rate by Gender</h6>
+                    <canvas id="genderChart"></canvas>
+                </div>
+                <div class="card p-3">
+                    <h6 class="mb-3">Subject Importance (Random Forest)</h6>
+                    <div id="rfImpErr" class="text-danger small d-none"></div>
+                    <canvas id="rfImpChart"></canvas>
+                </div>
+            </div>
+
+            <div class="grid-charts mb-3">
+                <div class="card p-3">
+                    <h6 class="mb-3">Pass Rate by School Location</h6>
+                    <canvas id="locationChart"></canvas>
+                </div>
+                <div class="card p-3">
+                    <h6 class="mb-3">Subject Importance (Logistic Regression)</h6>
+                    <div id="lrImpErr" class="text-danger small d-none"></div>
+                    <canvas id="lrImpChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Time series -->
+            <div class="grid-1 mb-3">
+                <div class="card p-3">
+                    <h6 class="mb-2">Time Series — Annual Pass Rates</h6>
+                    <small class="text-muted">Shows overall; if one province/district is selected, their trend appears
+                        too.</small>
+                    <canvas id="tsChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Probability hist -->
+            <div class="grid-1">
+                <div class="card p-3">
+                    <h6 class="mb-3">Pass Probability Distribution</h6>
+                    <canvas id="probHist"></canvas>
+                </div>
+            </div>
+
+            <div id="info" class="alert alert-info mt-3 d-none"></div>
+            <div id="error" class="alert alert-danger mt-3 d-none"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ---------- Endpoints ----------
+    const LIST_URL = "{% url 'artifacts:prediction_files_api' %}";
+    const DATA_URL = "{% url 'artifacts:dashboard_data_api' %}";
+    const FILTERS_URL = "{% url 'arti:filters_api' %}";
+
+    // ---------- GeoJSON ----------
+    const PROV_GEO_URL = "{% static 'geo/rwanda_provinces.geojson' %}";
+    const DIST_GEO_URL = "{% static 'geo/rwanda_districts.geojson' %}";
+    // Candidate name properties; code auto-detects which one matches your CSV keys
+    const PROV_NAME_PROP_CANDIDATES = ["shapeName", "NAME_1", "prov_name", "Province", "name"];
+    const DIST_NAME_PROP_CANDIDATES = ["shapeName", "NAME_2", "dist_name", "District", "name"];
+    // Properties that can identify Rwanda; if present we filter to RWA only
+    const ADM0_PROP_CANDIDATES = ["shapeGroup", "ADM0_NAME", "COUNTRY", "admin", "country"];
+    const ADM0_RW_MATCH = ["RWA", "Rwanda"];
+
+    // ---------- UI refs ----------
+    const INFO = document.getElementById("info");
+    const ERR = document.getElementById("error");
+    const FILE_SELECT = document.getElementById("fileSelect");
+    const fProvince = document.getElementById("fProvince");
+    const fDistrict = document.getElementById("fDistrict");
+    const fGender = document.getElementById("fGender");
+    const fLocation = document.getElementById("fLocation");
+    const fYearMin = document.getElementById("fYearMin");
+    const fYearMax = document.getElementById("fYearMax");
+
+    let charts = [];
+    let mapProv, mapDist, layerProv, layerDist, legendProv, legendDist;
+    let lastFile = null;
+
+    // ---------- helpers ----------
+    function percent(x) {
+        return (100 * x).toFixed(1) + "%";
+    }
+
+    function clearNode(n) {
+        while (n.firstChild) n.removeChild(n.firstChild);
+    }
+
+    function setKpis(p) {
+        document.getElementById("kpi-file").textContent = p.file || "—";
+        document.getElementById("kpi-pass").textContent = percent(p.overall.pass_rate);
+    }
+
+    function destroyCharts() {
+        charts.forEach(c => {
+            try {
+                c.destroy()
+            } catch (e) {
+            }
+        });
+        charts = [];
+    }
+
+    function mkChart(id, type, data, options) {
+        const ctx = document.getElementById(id);
+        if (!ctx) return;
+        const c = new Chart(ctx, {type, data, options: options || {responsive: true, maintainAspectRatio: false}});
+        charts.push(c);
+        return c;
+    }
+
+    function simpleBarOpts(yTitle) {
+        return {
+            responsive: true, maintainAspectRatio: false,
+            scales: {y: {beginAtZero: true, title: {display: !!yTitle, text: yTitle}}},
+            plugins: {legend: {display: false}}
+        };
+    }
+
+    function setMultiSelect(sel, values) {
+        clearNode(sel);
+        values.forEach(v => {
+            const o = document.createElement("option");
+            o.value = v;
+            o.textContent = v;
+            sel.appendChild(o);
+        });
+    }
+
+    function mult(sel) {
+        return Array.from(sel.selectedOptions).map(o => o.value);
+    }
+
+    // ---------- data loading ----------
+    async function loadFiles() {
+        const res = await fetch(LIST_URL);
+        const data = await res.json();
+        if (!res.ok || data.ok === false) throw new Error(data.error || "Failed to list files.");
+        clearNode(FILE_SELECT);
+        if (!data.files.length) {
+            const o = document.createElement("option");
+            o.textContent = "No prediction files found";
+            FILE_SELECT.appendChild(o);
+            throw new Error("No predictions CSV found. Upload first.");
+        }
+        data.files.forEach(f => {
+            const o = document.createElement("option");
+            o.value = f.name;
+            o.textContent = f.name;
+            FILE_SELECT.appendChild(o);
+        });
+        lastFile = FILE_SELECT.value;
+    }
+
+    async function loadFilters(filename) {
+        const url = new URL(FILTERS_URL, window.location.origin);
+        url.searchParams.set("file", filename);
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok || data.ok === false) throw new Error(data.error || "Failed to load filters.");
+
+        const fs = data.filters || {};
+        if (fs.Province) setMultiSelect(fProvince, fs.Province);
+        if (fs.District) setMultiSelect(fDistrict, fs.District);
+        if (fs.Gender) setMultiSelect(fGender, fs.Gender);
+        if (fs.School_Location) setMultiSelect(fLocation, fs.School_Location);
+
+        // --- Years: prefer explicit list; fallback to range; else disable ---
+        if (Array.isArray(data.years) && data.years.length) {
+            const ys = data.years.map(String);
+            setMultiSelect(fYearMin, ys);
+            setMultiSelect(fYearMax, ys);
+            fYearMin.value = ys[0];
+            fYearMax.value = ys[ys.length - 1];
+            fYearMin.disabled = false;
+            fYearMax.disabled = false;
+        } else if (data.year_range) {
+            const ys = [];
+            for (let y = data.year_range.min; y <= data.year_range.max; y++) ys.push(String(y));
+            setMultiSelect(fYearMin, ys);
+            setMultiSelect(fYearMax, ys);
+            fYearMin.value = String(data.year_range.min);
+            fYearMax.value = String(data.year_range.max);
+            fYearMin.disabled = false;
+            fYearMax.disabled = false;
+        } else {
+            setMultiSelect(fYearMin, []);
+            setMultiSelect(fYearMax, []);
+            fYearMin.disabled = true;
+            fYearMax.disabled = true;
+        }
+    }
+
+    function collectFilters() {
+        const file = FILE_SELECT.value;
+        const params = new URLSearchParams({file});
+        mult(fProvince).forEach(v => params.append("province", v));
+        mult(fDistrict).forEach(v => params.append("district", v));
+        mult(fGender).forEach(v => params.append("gender", v));
+        mult(fLocation).forEach(v => params.append("school_location", v));
+        if (fYearMin.value) params.set("year_min", fYearMin.value);
+        if (fYearMax.value) params.set("year_max", fYearMax.value);
+        return params;
+    }
+
+    async function loadData() {
+        const url = new URL(DATA_URL, window.location.origin);
+        url.search = collectFilters().toString();
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok || data.ok === false) {
+            ERR.classList.remove("d-none");
+            ERR.textContent = data.error || "Failed to load data.";
+            return;
+        }
+        ERR.classList.add("d-none");
+        renderAll(data);
+    }
+
+    // ---------- maps ----------
+    function colorScale(val) {
+        const p = Math.max(0, Math.min(1, val || 0));
+        if (p < 0.2) return "#d73027";
+        if (p < 0.4) return "#fc8d59";
+        if (p < 0.6) return "#fee08b";
+        if (p < 0.8) return "#91cf60";
+        return "#1a9850";
+    }
+
+    function legendControl() {
+        const div = L.DomUtil.create('div', 'legend');
+        const grades = [0, 0.2, 0.4, 0.6, 0.8];
+        div.innerHTML = '<strong>Pass rate</strong><br>';
+        for (let i = 0; i < grades.length; i++) {
+            const from = grades[i], to = grades[i + 1];
+            div.innerHTML += `<i style="background:${colorScale(from + 0.001)}"></i> ${Math.round(from * 100)}%${to ? `–${Math.round(to * 100)}%` : "+"}<br>`;
+        }
+        return div;
+    }
+
+    function attachLegend(map, old) {
+        if (old) {
+            map.removeControl(old);
+        }
+        const ctl = L.control({position: 'bottomright'});
+        ctl.onAdd = legendControl;
+        ctl.addTo(map);
+        return ctl;
+    }
+
+    function initMaps() {
+        if (!mapProv) {
+            mapProv = L.map('mapProv').setView([-1.95, 29.87], 7);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18}).addTo(mapProv);
+        }
+        if (!mapDist) {
+            mapDist = L.map('mapDist').setView([-1.95, 29.87], 7);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18}).addTo(mapDist);
+        }
+    }
+
+    function norm(s) {
+        return (s == null ? "" : String(s))
+            .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase().trim().replace(/\s+/g, " ").replace(/[-_]/g, " ");
+    }
+
+    function detectNameProp(features, rateMapKeys, candidates) {
+        let best = null, bestHits = -1;
+        const rset = new Set(rateMapKeys.map(norm));
+        for (const cand of candidates) {
+            let hits = 0;
+            for (const f of features) {
+                const v = norm(f.properties?.[cand]);
+                if (v && rset.has(v)) hits++;
+            }
+            if (hits > bestHits) {
+                bestHits = hits;
+                best = cand;
+            }
+        }
+        if (!best) {
+            for (const cand of candidates) {
+                if (features.some(f => f.properties?.[cand] != null)) return cand;
+            }
+        }
+        return best;
+    }
+
+    function filterToRwanda(features) {
+        for (const pName of ADM0_PROP_CANDIDATES) {
+            const vals = new Set(features.map(f => String(f.properties?.[pName] || "")));
+            const hasRwanda = [...vals].some(v => ADM0_RW_MATCH.includes(v));
+            if (hasRwanda) {
+                return features.filter(f => ADM0_RW_MATCH.includes(String(f.properties?.[pName] || "")));
+            }
+        }
+        return features;
+    }
+
+    async function drawChoropleth(map, geoUrl, rateMap, existingLayer, existingLegend, onClick, isProvince) {
+        const gj = await fetch(geoUrl).then(r => r.json());
+        let features = Array.isArray(gj.features) ? gj.features : [];
+        if (!features.length) {
+            console.warn("GeoJSON has no features:", geoUrl);
+            return {layer: existingLayer, legend: existingLegend};
+        }
+
+        features = filterToRwanda(features);
+        if (!features.length) {
+            console.error("No Rwanda features found:", geoUrl);
+            return {layer: existingLayer, legend: existingLegend};
+        }
+
+        const rateKeys = Object.keys(rateMap || {});
+        const nameProp = detectNameProp(features, rateKeys, isProvince ? PROV_NAME_PROP_CANDIDATES : DIST_NAME_PROP_CANDIDATES);
+        if (!nameProp) {
+            console.error("Could not detect a name property for", geoUrl);
+            return {layer: existingLayer, legend: existingLegend};
+        }
+
+        const normRate = {};
+        for (const [k, v] of Object.entries(rateMap || {})) normRate[norm(k)] = v;
+
+        if (existingLayer) {
+            map.removeLayer(existingLayer);
+        }
+
+        const layer = L.geoJSON({type: "FeatureCollection", features}, {
+            style: f => {
+                const name = norm(f.properties?.[nameProp]);
+                const rate = normRate[name];
+                return {
+                    fillColor: colorScale(rate),
+                    weight: 1,
+                    opacity: 1,
+                    color: '#999',
+                    fillOpacity: isNaN(rate) ? 0.12 : 0.8
+                };
+            },
+            onEachFeature: (feature, l) => {
+                const rawName = feature.properties?.[nameProp];
+                const rate = normRate[norm(rawName)];
+                l.bindTooltip(`${rawName ?? "Unknown"}<br>${isNaN(rate) ? "No data" : (Math.round(rate * 1000) / 10) + "% pass"}`);
+                if (onClick) {
+                    l.on('click', () => onClick(String(rawName || "")));
+                }
+                l.on('mouseover', () => l.setStyle({weight: 2, color: '#333'}));
+                l.on('mouseout', () => l.setStyle({weight: 1, color: '#999'}));
+            }
+        }).addTo(map);
+
+        const legend = attachLegend(map, existingLegend);
+        const b = layer.getBounds();
+        if (b.isValid()) {
+            map.fitBounds(b, {padding: [10, 10]});
+        } else {
+            map.setView([-1.95, 29.87], 7);
+        }
+        return {layer, legend};
+    }
+
+    async function renderMaps(groups) {
+        initMaps();
+        if (groups.province_map) {
+            const res1 = await drawChoropleth(
+                mapProv, PROV_GEO_URL, groups.province_map, layerProv, legendProv,
+                (name) => {
+                    Array.from(fProvince.options).forEach(o => o.selected = (norm(o.value) === norm(name)));
+                    loadData();
+                },
+                true
+            );
+            layerProv = res1.layer;
+            legendProv = res1.legend;
+        }
+        if (groups.district_map) {
+            const res2 = await drawChoropleth(
+                mapDist, DIST_GEO_URL, groups.district_map, layerDist, legendDist,
+                (name) => {
+                    Array.from(fDistrict.options).forEach(o => o.selected = (norm(o.value) === norm(name)));
+                    loadData();
+                },
+                false
+            );
+            layerDist = res2.layer;
+            legendDist = res2.legend;
+        }
+    }
+
+    // ---------- render ----------
+    function renderAll(payload) {
+        // KPIs
+        setKpis(payload);
+        destroyCharts();
+        INFO.classList.add("d-none");
+        ERR.classList.add("d-none");
+
+        // Province chart
+        if (payload.groups.province) {
+            const g = payload.groups.province;
+            mkChart("provinceChart", "bar", {
+                labels: g.labels,
+                datasets: [{label: "Pass rate (%)", data: g.pass_rate.map(v => Math.round(v * 1000) / 10)}]
+            }, simpleBarOpts("Pass rate (%)"));
+        }
+        // District chart
+        if (payload.groups.district_top) {
+            const g = payload.groups.district_top;
+            mkChart("districtChart", "bar", {
+                labels: g.labels,
+                datasets: [{label: "Pass rate (%)", data: g.pass_rate.map(v => Math.round(v * 1000) / 10)}]
+            }, simpleBarOpts("Pass rate (%)"));
+        }
+        // Gender
+        if (payload.groups.gender) {
+            const g = payload.groups.gender;
+            mkChart("genderChart", "bar", {
+                labels: g.labels,
+                datasets: [{label: "Pass rate (%)", data: g.pass_rate.map(v => Math.round(v * 1000) / 10)}]
+            }, simpleBarOpts("Pass rate (%)"));
+        }
+        // Location
+        if (payload.groups.location) {
+            const g = payload.groups.location;
+            mkChart("locationChart", "bar", {
+                labels: g.labels,
+                datasets: [{label: "Pass rate (%)", data: g.pass_rate.map(v => Math.round(v * 1000) / 10)}]
+            }, simpleBarOpts("Pass rate (%)"));
+        }
+        // Subject importance
+        const rfErr = document.getElementById("rfImpErr");
+        const lrErr = document.getElementById("lrImpErr");
+        if (rfErr && payload.importance_rf_error) {
+            rfErr.textContent = payload.importance_rf_error;
+            rfErr.classList.remove("d-none");
+        } else if (rfErr) {
+            rfErr.classList.add("d-none");
+        }
+        if (lrErr && payload.importance_lr_error) {
+            lrErr.textContent = payload.importance_lr_error;
+            lrErr.classList.remove("d-none");
+        } else if (lrErr) {
+            lrErr.classList.add("d-none");
+        }
+        if (payload.importance_rf && payload.importance_rf.labels) {
+            mkChart("rfImpChart", "bar", {
+                    labels: payload.importance_rf.labels,
+                    datasets: [{label: "Importance", data: payload.importance_rf.scores}]
+                },
+                {
+                    indexAxis: "y",
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {x: {beginAtZero: true, title: {display: true, text: "Relative importance"}}},
+                    plugins: {legend: {display: false}}
+                });
+        }
+        if (payload.importance_lr && payload.importance_lr.labels) {
+            mkChart("lrImpChart", "bar", {
+                    labels: payload.importance_lr.labels,
+                    datasets: [{label: "|Coefficient|", data: payload.importance_lr.scores}]
+                },
+                {
+                    indexAxis: "y",
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {x: {beginAtZero: true, title: {display: true, text: "|Coefficient| (relative)"}}},
+                    plugins: {legend: {display: false}}
+                });
+        }
+        // Time series
+        if (payload.timeseries) {
+            const ts = payload.timeseries;
+            const labels = (ts.overall_yearly || []).map(d => d.year);
+            const ds = [];
+            if (ts.overall_yearly) {
+                ds.push({label: "Overall", data: ts.overall_yearly.map(d => Math.round(d.pass_rate * 1000) / 10)});
+            }
+            if (ts.province_yearly) {
+                ds.push({
+                    label: `Province: ${ts.province_name}`,
+                    data: ts.province_yearly.map(d => Math.round(d.pass_rate * 1000) / 10)
+                });
+            }
+            if (ts.district_yearly) {
+                ds.push({
+                    label: `District: ${ts.district_name}`,
+                    data: ts.district_yearly.map(d => Math.round(d.pass_rate * 1000) / 10)
+                });
+            }
+            if (ds.length) {
+                mkChart("tsChart", "line", {labels, datasets: ds}, {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {y: {beginAtZero: true, title: {display: true, text: "Pass rate (%)"}}}
+                });
+            }
+        }
+        // Probability histogram
+        if (payload.groups.prob_hist) {
+            const h = payload.groups.prob_hist;
+            const mids = [];
+            for (let i = 0; i < h.counts.length; i++) {
+                mids.push(((h.edges[i] + h.edges[i + 1]) / 2).toFixed(2));
+            }
+            mkChart("probHist", "line", {labels: mids, datasets: [{label: "Count", data: h.counts}]},
+                {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {legend: {display: false}},
+                    scales: {y: {beginAtZero: true, title: {display: true, text: "Students"}}}
+                });
+        }
+
+        // Maps last
+        renderMaps(payload.groups);
+    }
+
+    // ---------- actions ----------
+    document.getElementById("applyBtn").addEventListener("click", (e) => {
+        e.preventDefault();
+        loadData();
+    });
+    document.getElementById("clearBtn").addEventListener("click", (e) => {
+        e.preventDefault();
+        [fProvince, fDistrict, fGender, fLocation].forEach(sel => Array.from(sel.options).forEach(o => o.selected = false));
+        if (fYearMin.options.length) fYearMin.selectedIndex = 0;
+        if (fYearMax.options.length) fYearMax.selectedIndex = fYearMax.options.length - 1;
+        loadData();
+    });
+    FILE_SELECT.addEventListener("change", async (e) => {
+        lastFile = e.target.value;
+        await loadFilters(lastFile);
+        await loadData();
+    });
+
+    // ---------- init ----------
+    (async () => {
+        try {
+            await loadFiles();
+            await loadFilters(lastFile);
+            await loadData();
+        } catch (e) {
+            ERR.classList.remove("d-none");
+            ERR.textContent = e.message || String(e);
+        }
+    })();
+</script>
+</body>
+</html>

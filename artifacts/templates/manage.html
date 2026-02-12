@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Saved Models</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 24px
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns:1fr 2fr;
+            gap: 20px
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 16px
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            text-align: left
+        }
+
+        .messages li {
+            list-style: none;
+            margin: 6px 0;
+            padding: 8px;
+            border-radius: 8px
+        }
+
+        .success {
+            background: #e6ffed;
+            border: 1px solid #b7f5c7
+        }
+
+        .error {
+            background: #ffecec;
+            border: 1px solid #ffb3b3
+        }
+
+        .nav a {
+            color: #1f6feb;
+            text-decoration: none
+        }
+    </style>
+</head>
+<body>
+<div class="nav" style="margin-bottom:12px;">
+    <a href="{% url 'artifacts:run' %}">Run Prediction / Forecast</a> |
+    <a href="{% url 'pred:datasets' %}">View Datasets</a> |
+    <a href="{% url 'levels:list' %}">Manage Levels</a>
+</div>
+
+{% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+            <li class="{{ message.tags }}">{{ message }}</li>{% endfor %}
+    </ul>
+{% endif %}
+
+<h1>Saved Models</h1>
+<div class="grid">
+    <div class="card">
+        <h2>Add Model</h2>
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit">Save</button>
+        </form>
+    </div>
+    <div class="card">
+        <h2>Existing</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Name</th>
+                <th>Level</th>
+                <th>Task</th>
+                <th>Format</th>
+                <th>File</th>
+                <th>Created</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for a in artifacts %}
+                <tr>
+                    <td>{{ a.name }}</td>
+                    <td>{{ a.level.name }}</td>
+                    <td>{{ a.get_task_display }}</td>
+                    <td>{{ a.get_model_format_display }}</td>
+                    <td><a href="{{ a.file.url }}" download>Download</a></td>
+                    <td>{{ a.created_at|date:"Y-m-d H:i" }}</td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="6">No models saved yet.</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>

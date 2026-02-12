@@ -1,0 +1,294 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>O-Level: Predict A-Level Stream (Single Student)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Bootstrap & Chart.js -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        .subject-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .year-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .year-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .input-row {
+            display: grid;
+            grid-template-columns: 1fr 120px;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .result-card {
+            border: 1px solid #d1fae5;
+            background: #f0fdf4;
+            border-radius: 12px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        }
+    </style>
+</head>
+<body class="bg-light">
+<div class="container py-4">
+    <h3 class="mb-1">O-Level: Predict A-Level Stream</h3>
+    <div class="text-secondary mb-3">Enter S1–S3 subject scores for one student and select a model.</div>
+
+    <!-- Controls -->
+    <div class="card p-3 mb-3">
+        <div class="row g-3">
+            <div class="col-sm-4">
+                <label class="form-label">Model</label>
+                <select id="model" class="form-select">
+                    <option value="olevel_ens">Ensemble (avg)</option>
+                    <option value="olevel_lstm">LSTM (sequence)</option>
+                    <option value="olevel_rf">Random Forest</option>
+                </select>
+            </div>
+            <div class="col-sm-4" id="alphaWrap">
+                <label for="alpha" class="form-label">Ensemble Weight α (LSTM share)</label>
+                <div class="d-flex align-items-center gap-2">
+                    <input id="alpha" type="range" min="0" max="1" step="0.05" value="0.5" class="form-range"
+                           style="width: 200px;">
+                    <span id="alphaVal" class="mono">0.50</span>
+                </div>
+            </div>
+            <div class="col-sm-4 d-flex align-items-end">
+                <button id="btnPredict" class="btn btn-primary me-2">Predict</button>
+                <button id="btnClear" class="btn btn-outline-secondary me-2">Clear</button>
+                <button id="btnDemo" class="btn btn-success">Demo fill</button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Inputs -->
+    <div class="subject-grid" id="grid"></div>
+
+    <!-- Result -->
+    <div id="result" class="result-card p-3 mt-3 hidden">
+        <h5 class="mb-2">Prediction</h5>
+        <div class="row">
+            <div class="col-md-4">
+                <div><span class="text-secondary">Predicted stream:</span> <span id="predStream"
+                                                                                 class="fw-semibold"></span></div>
+                <div><span class="text-secondary">Top-K streams:</span> <span id="topK" class="mono"></span></div>
+                <div class="small text-secondary">Model: <span id="usedModel"></span>, α=<span id="usedAlpha"></span>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <canvas id="topkChart" height="120"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts -->
+    <div id="msg" class="alert alert-danger mt-3 hidden"></div>
+</div>
+
+<script>
+    const API = "{% url 'olevel:predict_one_olevel' %}";
+
+    // Build inputs dynamically from the API schema
+    const grid = document.getElementById('grid');
+    const modelSel = document.getElementById('model');
+    const alphaWrap = document.getElementById('alphaWrap');
+    const alphaRange = document.getElementById('alpha');
+    const alphaVal = document.getElementById('alphaVal');
+    const btnPredict = document.getElementById('btnPredict');
+    const btnClear = document.getElementById('btnClear');
+    const resultBox = document.getElementById('result');
+    const msgBox = document.getElementById('msg');
+    const predStreamEl = document.getElementById('predStream');
+    const topKEl = document.getElementById('topK');
+    const usedModelEl = document.getElementById('usedModel');
+    const usedAlphaEl = document.getElementById('usedAlpha');
+
+    let inputs = {};   // { "S1_Mathematics": <input>, ... }
+    let chart;         // Chart.js instance
+
+    function showMsg(text) {
+        msgBox.textContent = text;
+        msgBox.classList.remove('hidden');
+    }
+
+    function hideMsg() {
+        msgBox.classList.add('hidden');
+    }
+
+    function showResult() {
+        resultBox.classList.remove('hidden');
+    }
+
+    function hideResult() {
+        resultBox.classList.add('hidden');
+    }
+
+    alphaRange.addEventListener('input', () => {
+        alphaVal.textContent = Number(alphaRange.value).toFixed(2);
+    });
+    modelSel.addEventListener('change', () => {
+        alphaWrap.classList.toggle('hidden', modelSel.value !== 'olevel_ens');
+    });
+
+    function buildYearCard(title, fields) {
+        const card = document.createElement('div');
+        card.className = 'year-card';
+        const h = document.createElement('div');
+        h.className = 'year-title';
+        h.textContent = title;
+        card.appendChild(h);
+        fields.forEach(name => {
+            const row = document.createElement('div');
+            row.className = 'input-row mb-2';
+            const lab = document.createElement('label');
+            lab.className = 'form-label m-0';
+            lab.textContent = name.split('_').slice(1).join('_'); // Subject
+            const inp = document.createElement('input');
+            inp.type = 'number';
+            inp.step = '0.01';
+            inp.min = '0';
+            inp.max = '100';
+            inp.className = 'form-control';
+            inp.placeholder = 'e.g., 75';
+            inp.dataset.key = name;
+            inputs[name] = inp;
+            row.appendChild(lab);
+            row.appendChild(inp);
+            card.appendChild(row);
+        });
+        return card;
+    }
+
+    async function loadSchemaAndBuild() {
+        try {
+            const res = await fetch(API, {method: 'GET'});
+            const data = await res.json();
+            if (!res.ok || data.ok === false) throw new Error(data.error || 'Failed to load schema');
+
+            // required_columns: full list; group by S1/S2/S3
+            const req = (data.required_columns || []).slice().sort();
+            const s1 = req.filter(c => c.startsWith('S1_'));
+            const s2 = req.filter(c => c.startsWith('S2_'));
+            const s3 = req.filter(c => c.startsWith('S3_'));
+
+            grid.innerHTML = '';
+            grid.appendChild(buildYearCard('S1', s1));
+            grid.appendChild(buildYearCard('S2', s2));
+            grid.appendChild(buildYearCard('S3', s3));
+
+            // Default: ensemble visible
+            alphaWrap.classList.toggle('hidden', modelSel.value !== 'olevel_ens');
+        } catch (e) {
+            showMsg(e.message);
+        }
+    }
+
+    function getPayload() {
+        const payload = {model: modelSel.value};
+        if (modelSel.value === 'olevel_ens') payload.alpha = Number(alphaRange.value);
+        // collect numbers
+        for (const [k, el] of Object.entries(inputs)) {
+            const v = el.value.trim();
+            if (v === '') throw new Error(`Missing value for ${k}`);
+            const num = Number(v);
+            if (Number.isNaN(num)) throw new Error(`Invalid number for ${k}`);
+            payload[k] = num;
+        }
+        return payload;
+    }
+
+    async function doPredict() {
+        hideMsg();
+        hideResult();
+        try {
+            const payload = getPayload();
+            const res = await fetch(API, {
+                method: 'POST',
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (!res.ok || data.ok === false) throw new Error(data.error || 'Prediction failed.');
+
+            // Render result
+            predStreamEl.textContent = data.pred_stream;
+            usedModelEl.textContent = data.model;
+            usedAlphaEl.textContent = (payload.alpha ?? 0.0).toFixed(2);
+
+            // Top-K list
+            const labels = data.topk_streams || [];
+            const probs = (data.topk_probs || []).map(p => Number(p));
+            topKEl.textContent = labels.map((l, i) => `${l}:${probs[i].toFixed(3)}`).join('  |  ');
+
+            // Chart
+            const ctx = document.getElementById('topkChart');
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {labels, datasets: [{label: 'Probability', data: probs}]},
+                options: {
+                    responsive: true,
+                    plugins: {legend: {display: false}},
+                    scales: {y: {min: 0, max: 1, ticks: {stepSize: 0.1}}}
+                }
+            });
+
+            showResult();
+        } catch (e) {
+            showMsg(e.message);
+        }
+    }
+
+    function clearAll() {
+        Object.values(inputs).forEach(inp => inp.value = '');
+        hideResult();
+        hideMsg();
+    }
+
+    function demoFill() {
+        const r = (a, b) => Math.round(a + Math.random() * (b - a));     // int in [a,b]
+        // Per-subject base score, then small upward trend S1→S3 + noise
+        const subjects = new Set(Object.keys(inputs).map(k => k.split('_').slice(1).join('_')));
+        const base = {};
+        subjects.forEach(s => base[s] = r(55, 85));
+        for (const [k, el] of Object.entries(inputs)) {
+            const year = k.split('_')[0];                           // S1/S2/S3
+            const subj = k.split('_').slice(1).join('_');           // Mathematics, Social_Studies, ...
+            const bump = year === 'S1' ? r(-5, 5) : year === 'S2' ? r(0, 8) : r(3, 12);
+            el.value = Math.max(0, Math.min(100, base[subj] + bump));
+        }
+        hideMsg();
+        showResult();                                   // show card so users see chart after predict
+        hideResult();                                              // keep hidden until they click Predict
+    }
+
+    // Events
+    btnPredict.addEventListener('click', doPredict);
+    btnClear.addEventListener('click', clearAll);
+    document.getElementById('btnDemo').addEventListener('click', demoFill);
+
+    // Init
+    loadSchemaAndBuild();
+</script>
+</body>
+</html>

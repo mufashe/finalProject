@@ -1,0 +1,334 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>O-Level Stream Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        .card-soft {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+        }
+
+        .mono {
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+        }
+    </style>
+</head>
+<body class="bg-light">
+<div class="container py-4">
+
+    <h3 class="mb-2">O-Level Stream Dashboard</h3>
+    <p class="text-secondary">Explore predicted A-Level streams by region, gender, year—and see which subjects drive
+        allocation.</p>
+
+    <!-- Controls -->
+    <div class="card card-soft p-3 mb-3">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Predictions file</label>
+                <select id="fileSel" class="form-select"></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Province</label>
+                <select id="fProvince" class="form-select" multiple></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">District</label>
+                <select id="fDistrict" class="form-select" multiple></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Gender</label>
+                <select id="fGender" class="form-select" multiple></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">School Location</label>
+                <select id="fLoc" class="form-select" multiple></select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Academic Year (min → max)</label>
+                <div class="d-flex gap-2">
+                    <select id="yearMin" class="form-select"></select>
+                    <select id="yearMax" class="form-select"></select>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <button id="btnRefresh" class="btn btn-primary w-100">Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card card-soft p-3">
+                <h6 class="mb-2">Overall Stream Allocation</h6>
+                <canvas id="overallBar" height="160"></canvas>
+                <div class="small text-secondary mt-2">Total records: <span id="total"></span></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card card-soft p-3">
+                <h6 class="mb-2">Average Confidence per Predicted Stream</h6>
+                <canvas id="confBar" height="160"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grouped stacks -->
+    <div class="row g-3 mt-1">
+        <div class="col-lg-6">
+            <div class="card card-soft p-3">
+                <h6 class="mb-2">By Gender (stacked)</h6>
+                <canvas id="byGender" height="160"></canvas>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card card-soft p-3">
+                <h6 class="mb-2">Top Provinces (stacked)</h6>
+                <canvas id="byProvince" height="160"></canvas>
+            </div>
+        </div>
+        <div class="col-12">
+            <div class="card card-soft p-3">
+                <h6 class="mb-2">Top Districts (stacked)</h6>
+                <canvas id="byDistrict" height="220"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time series -->
+    <div class="card card-soft p-3 mt-3">
+        <h6 class="mb-2">Yearly Allocation (counts per stream)</h6>
+        <canvas id="yearly" height="180"></canvas>
+    </div>
+
+    <!-- RF Subject Importance -->
+    <div class="row g-3 mt-1">
+        <div class="col-lg-6">
+            <div class="card card-soft p-3">
+                <h6 class="mb-2">Subject Importance (Random Forest)</h6>
+                <canvas id="subjTotal" height="160"></canvas>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card card-soft p-3">
+                <h6 class="mb-2">Importance by Year & Subject (S1–S3)</h6>
+                <canvas id="subjByYear" height="160"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="err" class="alert alert-danger mt-3 d-none"></div>
+</div>
+
+<script>
+    const FILES_URL = "{% url 'olevel:olevel_prediction_files_api' %}";
+    const FILTERS_URL = "{% url 'olevel:olevel_filters_api' %}";
+    const DATA_URL = "{% url 'olevel:olevel_dashboard_data_api' %}";
+
+    const fileSel = document.getElementById('fileSel');
+    const fProvince = document.getElementById('fProvince');
+    const fDistrict = document.getElementById('fDistrict');
+    const fGender = document.getElementById('fGender');
+    const fLoc = document.getElementById('fLoc');
+    const yearMin = document.getElementById('yearMin');
+    const yearMax = document.getElementById('yearMax');
+    const totalSpan = document.getElementById('total');
+    const btnRefresh = document.getElementById('btnRefresh');
+    const errBox = document.getElementById('err');
+
+    let chOverall, chConf, chGender, chProvince, chDistrict, chYearly, chSubj, chSubjYear;
+
+    function setOptions(sel, arr) {
+        sel.innerHTML = '';
+        (arr || []).forEach(v => {
+            const o = document.createElement('option');
+            o.value = v;
+            o.textContent = v;
+            sel.appendChild(o);
+        });
+    }
+
+    function setSingleOptions(sel, arr) {
+        setOptions(sel, arr);
+        if (arr && arr.length) {
+            sel.value = arr[0];
+        }
+    }
+
+    function err(msg) {
+        errBox.textContent = msg;
+        errBox.classList.remove('d-none');
+    }
+
+    function clearErr() {
+        errBox.classList.add('d-none');
+        errBox.textContent = '';
+    }
+
+    async function loadFiles() {
+        const r = await fetch(FILES_URL);
+        const d = await r.json();
+        if (!r.ok || d.ok === false) throw new Error(d.error || "Failed to list files");
+        setOptions(fileSel, d.files.map(x => x.name));
+        if (d.files.length) await loadFilters();
+    }
+
+    async function loadFilters() {
+        const f = fileSel.value;
+        if (!f) return;
+        const u = new URL(FILTERS_URL, window.location.origin);
+        u.searchParams.set('file', f);
+        const r = await fetch(u);
+        const d = await r.json();
+        if (!r.ok || d.ok === false) throw new Error(d.error || "Failed to load filters");
+        const fs = d.filters || {};
+        setOptions(fProvince, fs.Province || []);
+        setOptions(fDistrict, fs.District || []);
+        setOptions(fGender, fs.Gender || []);
+        setOptions(fLoc, fs.School_Location || []);
+        if (d.years && d.years.length) {
+            setSingleOptions(yearMin, d.years);
+            setSingleOptions(yearMax, d.years);
+            yearMax.value = d.years[d.years.length - 1];
+        } else if (d.year_range) {
+            const ys = [];
+            for (let y = d.year_range.min; y <= d.year_range.max; y++) ys.push(String(y));
+            setSingleOptions(yearMin, ys);
+            setSingleOptions(yearMax, ys);
+            yearMax.value = String(d.year_range.max);
+        } else {
+            setOptions(yearMin, []);
+            setOptions(yearMax, []);
+        }
+        await loadData();
+    }
+
+    function collectFilters(u) {
+        const multi = (sel) => Array.from(sel.selectedOptions).map(o => o.value);
+        const push = (key, vals) => vals.forEach(v => u.searchParams.append(key, v));
+        const f = {
+            province: multi(fProvince),
+            district: multi(fDistrict),
+            gender: multi(fGender),
+            school_location: multi(fLoc)
+        };
+        push('province', f.province);
+        push('district', f.district);
+        push('gender', f.gender);
+        push('school_location', f.school_location);
+        if (yearMin.value) u.searchParams.set('year_min', yearMin.value);
+        if (yearMax.value) u.searchParams.set('year_max', yearMax.value);
+    }
+
+    async function loadData() {
+        clearErr();
+        const f = fileSel.value;
+        if (!f) return;
+        const u = new URL(DATA_URL, window.location.origin);
+        u.searchParams.set('file', f);
+        collectFilters(u);
+        const r = await fetch(u);
+        const d = await r.json();
+        if (!r.ok || d.ok === false) {
+            err(d.error || 'Load failed');
+            return;
+        }
+        renderCharts(d);
+    }
+
+    function mkBar(ctx, labels, data, title, stacked = false) {
+        return new Chart(ctx, {
+            type: 'bar',
+            data: {labels, datasets: data},
+            options: {
+                responsive: true,
+                plugins: {legend: {display: data.length > 1}, title: {display: !!title, text: title}},
+                scales: {x: {stacked}, y: {stacked, beginAtZero: true}}
+            }
+        });
+    }
+
+    function mkLine(ctx, labels, data) {
+        return new Chart(ctx, {
+            type: 'line',
+            data: {labels, datasets: data},
+            options: {responsive: true, plugins: {legend: {position: 'top'}}, scales: {y: {beginAtZero: true}}}
+        });
+    }
+
+    function renderCharts(d) {
+        totalSpan.textContent = (d.overall && d.overall.total) || 0;
+
+        // Overall
+        const cls = d.overall.labels || [];
+        const counts = d.overall.counts || [];
+        if (chOverall) chOverall.destroy();
+        chOverall = mkBar(document.getElementById('overallBar'), cls, [{label: 'Count', data: counts}], '');
+
+        // Confidence
+        const conf = d.overall.avg_confidence || [];
+        if (chConf) chConf.destroy();
+        chConf = mkBar(document.getElementById('confBar'), cls, [{label: 'Avg Probability', data: conf}], '');
+
+        // Gender stacked
+        if (chGender) chGender.destroy();
+        const g = d.by_gender || {};
+        const gLabels = g.groups || [];
+        const gSeries = (g.series || []).map((arr, i) => ({label: cls[i], data: arr}));
+        chGender = mkBar(document.getElementById('byGender'), gLabels, gSeries, '', true);
+
+        // Province stacked
+        if (chProvince) chProvince.destroy();
+        const p = d.by_province || {};
+        const pLabels = p.groups || [];
+        const pSeries = (p.series || []).map((arr, i) => ({label: cls[i], data: arr}));
+        chProvince = mkBar(document.getElementById('byProvince'), pLabels, pSeries, '', true);
+
+        // District stacked
+        if (chDistrict) chDistrict.destroy();
+        const di = d.by_district || {};
+        const diLabels = di.groups || [];
+        const diSeries = (di.series || []).map((arr, i) => ({label: cls[i], data: arr}));
+        chDistrict = mkBar(document.getElementById('byDistrict'), diLabels, diSeries, '', true);
+
+        // Yearly multi-line
+        if (chYearly) chYearly.destroy();
+        const yr = d.yearly || {};
+        const years = yr.years || [];
+        const ySeries = [];
+        if (yr.series) {
+            for (const k of Object.keys(yr.series)) {
+                ySeries.push({label: k, data: yr.series[k], fill: false});
+            }
+        }
+        chYearly = mkLine(document.getElementById('yearly'), years, ySeries);
+
+        // RF subject importance
+        if (chSubj) chSubj.destroy();
+        const imp = d.rf_importance || {};
+        const subj = imp.subjects || [];
+        const total = imp.total || [];
+        chSubj = mkBar(document.getElementById('subjTotal'), subj, [{label: 'Importance', data: total}], '');
+
+        if (chSubjYear) chSubjYear.destroy();
+        const perYear = imp.per_year || {};
+        const yDatasets = [];
+        for (const y of ['S1', 'S2', 'S3']) {
+            if (perYear[y]) yDatasets.push({label: y, data: perYear[y]});
+        }
+        chSubjYear = mkBar(document.getElementById('subjByYear'), subj, yDatasets, '', true);
+    }
+
+    fileSel.addEventListener('change', loadFilters);
+    btnRefresh.addEventListener('click', loadData);
+
+    // init
+    loadFiles().catch(e => err(e.message || String(e)));
+</script>
+</body>
+</html>
